@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
+import 'screens/welcome_screen.dart';
+
 void main() {
-  runApp(const MainApp());
+	runApp(const MedivaultApp());
 }
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+class MedivaultApp extends StatelessWidget {
+	const MedivaultApp({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(body: Center(child: Text('Hello World!'))),
-    );
-  }
+	@override
+	Widget build(BuildContext context) {
+		return const MaterialApp(
+			home: WelcomeScreen(),
+		);
+	}
 }
+
