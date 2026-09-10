@@ -11,11 +11,13 @@ class login_screen extends StatelessWidget {
       backgroundColor: Appcolors.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Center(
-            child: Transform.translate(
-              offset: const Offset(0, -50),
+          child: Padding(
+            padding: const EdgeInsets.only(
+              top: 100,
+              bottom: 30,
+            ),
+            child: Center(
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Image.asset(
                     'assets/images/medivault_logo.png',
@@ -130,7 +132,6 @@ class login_screen extends StatelessWidget {
                           fontSize: 14,
                         ),
                       ),
-
                       TextButton(
                         onPressed: () {
                           // Navigate to Register screen later
