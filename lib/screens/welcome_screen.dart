@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-
+import '../utils/appcolors.dart';
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -81,7 +81,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F8FA),
+      backgroundColor: Appcolors.background,
 
       body: Center(
         child: Column(
@@ -123,7 +123,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: Color.fromARGB(255, 21, 158, 221),
+                  color: Appcolors.primary,
                   letterSpacing: 2.0,
                   fontFamily: 'Roboto',
                 ),
@@ -149,7 +149,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.black54,
+                  color: Appcolors.secondaryText,
                   letterSpacing: 1.0,
                   height: 1.5,
                 ),
@@ -172,7 +172,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
-                        const Color.fromARGB(255, 21, 158, 221),
+                       Appcolors.primary, // Use the primary color from Appcolors
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 40,
