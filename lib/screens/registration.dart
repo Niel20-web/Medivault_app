@@ -1,28 +1,6 @@
 import 'package:flutter/material.dart';
+
 import '../utils/appcolors.dart';
-
-class MedivaultApp extends StatelessWidget {
-  const MedivaultApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Registration Page',
-      theme: ThemeData(
-        primaryColor: Appcolors.cyan,
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          filled: true,
-          fillColor: Colors.white,
-        ),
-      ),
-      home: const RegistrationPage(),
-    );
-  }
-}
 
 class RegistrationPage extends StatefulWidget {
   const RegistrationPage({super.key});
@@ -35,7 +13,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final _formKey = GlobalKey<FormState>();
 
   DateTime? selectedDate;
-
   String? selectedBloodGroup;
 
   // Date of Birth Picker
@@ -53,7 +30,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
       });
     }
   }
-
 
   final List<String> bloodGroups = [
     'A+',
@@ -129,8 +105,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
               const SizedBox(height: 16),
 
-               //DATE OF BIRTH
-               TextFormField(
+              // Date of Birth
+              TextFormField(
                 readOnly: true,
                 decoration: const InputDecoration(
                   labelText: 'Date of Birth',
@@ -174,7 +150,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
               const SizedBox(height: 16),
 
-              // EMAIL
+              // Email
               TextFormField(
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
@@ -196,7 +172,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
               const SizedBox(height: 16),
 
-               TextFormField(
+              // Password
+              TextFormField(
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: 'Password',
@@ -227,6 +204,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your town/locality';
                   }
+
                   return null;
                 },
               ),
@@ -243,6 +221,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your house number';
                   }
+
                   return null;
                 },
               ),
@@ -259,6 +238,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your state';
                   }
+
                   return null;
                 },
               ),
@@ -275,10 +255,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your city';
                   }
+
                   return null;
                 },
               ),
-          
+
               const SizedBox(height: 16),
 
               // PIN Code
@@ -329,24 +310,28 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null) {
                     return 'Please select your blood group';
                   }
+
                   return null;
                 },
               ),
 
               const SizedBox(height: 16),
 
-              // Emergency Dial Number
+              // Emergency Contact Number
               TextFormField(
                 keyboardType: TextInputType.phone,
+
                 decoration: const InputDecoration(
-                  labelText: 'Emergency contact Number',  
+                  labelText: 'Emergency Contact Number',
                   prefixIcon: Icon(Icons.emergency),
                   hintText: 'Example: 112',
                 ),
+
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter an emergency number';
                   }
+
                   return null;
                 },
               ),
@@ -360,8 +345,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:Appcolors.primary,
+                    backgroundColor: Appcolors.primary,
                     foregroundColor: Colors.white,
+
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
