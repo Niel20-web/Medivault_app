@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import '../utils/appcolors.dart';
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MedivaultApp extends StatelessWidget {
+  const MedivaultApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -9,7 +10,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Registration Page',
       theme: ThemeData(
-        primarySwatch: Colors.teal,
+        primaryColor: Appcolors.cyan,
         inputDecorationTheme: InputDecorationTheme(
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
@@ -49,7 +50,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: Appcolors.background,
 
       appBar: AppBar(
         title: const Text(
@@ -179,6 +180,22 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
               const SizedBox(height: 16),
 
+              // City
+              TextFormField(
+                decoration: const InputDecoration(
+                  labelText: 'City',
+                  prefixIcon: Icon(Icons.map),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your city';
+                  }
+                  return null;
+                },
+              ),
+          
+              const SizedBox(height: 16),
+
               // PIN Code
               TextFormField(
                 keyboardType: TextInputType.number,
@@ -258,7 +275,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
+                    backgroundColor:Appcolors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
