@@ -34,7 +34,26 @@ class RegistrationPage extends StatefulWidget {
 class _RegistrationPageState extends State<RegistrationPage> {
   final _formKey = GlobalKey<FormState>();
 
+  DateTime? selectedDate;
+
   String? selectedBloodGroup;
+
+  // Date of Birth Picker
+  Future<void> selectDate() async {
+    DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2000),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+
+    if (pickedDate != null) {
+      setState(() {
+        selectedDate = pickedDate;
+      });
+    }
+  }
+
 
   final List<String> bloodGroups = [
     'A+',
@@ -110,6 +129,29 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
               const SizedBox(height: 16),
 
+               //DATE OF BIRTH
+               TextFormField(
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: 'Date of Birth',
+                  prefixIcon: Icon(Icons.calendar_month),
+                ),
+                controller: TextEditingController(
+                  text: selectedDate == null
+                      ? ''
+                      : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
+                ),
+                onTap: selectDate,
+                validator: (value) {
+                  if (selectedDate == null) {
+                    return 'Please select your date of birth';
+                  }
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 16),
+
               // Phone Number
               TextFormField(
                 keyboardType: TextInputType.phone,
@@ -124,6 +166,49 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
                   if (value.length != 10) {
                     return 'Enter a valid 10-digit phone number';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              // EMAIL
+              TextFormField(
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email Address',
+                  prefixIcon: Icon(Icons.email),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your email';
+                  }
+
+                  if (!value.contains('@')) {
+                    return 'Please enter a valid email';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+               TextFormField(
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: Icon(Icons.lock),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter a password';
+                  }
+
+                  if (value.length < 6) {
+                    return 'Password must be at least 6 characters';
                   }
 
                   return null;
@@ -254,7 +339,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
               TextFormField(
                 keyboardType: TextInputType.phone,
                 decoration: const InputDecoration(
-                  labelText: 'Emergency Dial Number',
+                  labelText: 'Emergency contact Number',  
                   prefixIcon: Icon(Icons.emergency),
                   hintText: 'Example: 112',
                 ),
