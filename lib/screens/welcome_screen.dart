@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/appcolors.dart';
+import 'login_screen.dart';
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -168,7 +169,12 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 ).animate(_buttonAnimation),
                 child: ElevatedButton(
                   onPressed: () {
-                    // Navigation will go here later
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const login_screen(),
+                      ), 
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor:
