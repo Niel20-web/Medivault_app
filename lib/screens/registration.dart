@@ -1,35 +1,73 @@
 import 'package:flutter/material.dart';
-
 import '../utils/appcolors.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+// ---------------------------------------------------------
+// MAIN APP
+// ---------------------------------------------------------
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Registration',
+      theme: ThemeData(
+        fontFamily: 'Arial',
+        scaffoldBackgroundColor: Appcolors.background,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Appcolors.cyan,
+        ),
+      ),
+      home: const RegistrationPage(),
+    );
+  }
+}
+
+// ---------------------------------------------------------
+// REGISTRATION PAGE
+// ---------------------------------------------------------
 
 class RegistrationPage extends StatefulWidget {
   const RegistrationPage({super.key});
 
   @override
-  State<RegistrationPage> createState() => _RegistrationPageState();
+  State<RegistrationPage> createState() =>
+      _RegistrationPageState();
 }
 
-class _RegistrationPageState extends State<RegistrationPage> {
-  final _formKey = GlobalKey<FormState>();
+class _RegistrationPageState
+    extends State<RegistrationPage> {
 
-  DateTime? selectedDate;
+  // Controllers
+  final fullNameController = TextEditingController();
+  final emailController = TextEditingController();
+  final phoneController = TextEditingController();
+  final passwordController = TextEditingController();
+  final confirmPasswordController = TextEditingController();
+
+  final houseController = TextEditingController();
+  final townController = TextEditingController();
+  final cityController = TextEditingController();
+  final stateController = TextEditingController();
+  final pinController = TextEditingController();
+
+  final contactNameController = TextEditingController();
+  final contactNumberController = TextEditingController();
+  final emergencyDialController = TextEditingController();
+
+  // Page controller
+  final PageController pageController = PageController();
+
+  int currentStep = 0;
+
+  // Blood group
   String? selectedBloodGroup;
-
-  // Date of Birth Picker
-  Future<void> selectDate() async {
-    DateTime? pickedDate = await showDatePicker(
-      context: context,
-      initialDate: DateTime(2000),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-    );
-
-    if (pickedDate != null) {
-      setState(() {
-        selectedDate = pickedDate;
-      });
-    }
-  }
 
   final List<String> bloodGroups = [
     'A+',
@@ -42,344 +80,814 @@ class _RegistrationPageState extends State<RegistrationPage> {
     'O-',
   ];
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Appcolors.background,
+  // Date of birth
+  DateTime? dateOfBirth;
 
-      appBar: AppBar(
-        title: const Text(
-          'Registration',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+  // ---------------------------------------------------------
+  // DATE PICKER
+  // ---------------------------------------------------------
+
+  Future<void> selectDate() async {
+
+    DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2000),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+
+    if (pickedDate != null) {
+      setState(() {
+        dateOfBirth = pickedDate;
+      });
+    }
+  }
+
+  // ---------------------------------------------------------
+  // NEXT PAGE
+  // ---------------------------------------------------------
+
+  void nextPage() {
+
+    if (currentStep < 2) {
+
+      setState(() {
+        currentStep++;
+      });
+
+      pageController.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+
+    } else {
+
+      // Final registration
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Registration Successful!',
           ),
         ),
-        centerTitle: true,
-        backgroundColor: Colors.teal,
-      ),
+      );
+    }
+  }
 
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+  // ---------------------------------------------------------
+  // PREVIOUS PAGE
+  // ---------------------------------------------------------
 
-        child: Form(
-          key: _formKey,
+  void previousPage() {
 
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    if (currentStep > 0) {
 
-              const Text(
-                'Create Your Profile',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+      setState(() {
+        currentStep--;
+      });
 
-              const SizedBox(height: 8),
+      pageController.previousPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
 
-              const Text(
-                'Please enter your details below.',
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.grey,
-                ),
-              ),
+  // ---------------------------------------------------------
+  // INPUT FIELD
+  // ---------------------------------------------------------
 
-              const SizedBox(height: 25),
+  Widget inputField({
+    required String label,
+    required IconData icon,
+    required TextEditingController controller,
+    TextInputType keyboardType = TextInputType.text,
+    bool obscureText = false,
+  }) {
 
-              // Full Name
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
-                  prefixIcon: Icon(Icons.person),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your full name';
-                  }
-                  return null;
-                },
-              ),
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      obscureText: obscureText,
 
-              const SizedBox(height: 16),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
 
-              // Date of Birth
-              TextFormField(
-                readOnly: true,
-                decoration: const InputDecoration(
-                  labelText: 'Date of Birth',
-                  prefixIcon: Icon(Icons.calendar_month),
-                ),
-                controller: TextEditingController(
-                  text: selectedDate == null
-                      ? ''
-                      : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
-                ),
-                onTap: selectDate,
-                validator: (value) {
-                  if (selectedDate == null) {
-                    return 'Please select your date of birth';
-                  }
-                  return null;
-                },
-              ),
+        filled: true,
+        fillColor: Appcolors.background,
 
-              const SizedBox(height: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: Appcolors.border,
+          ),
+        ),
 
-              // Phone Number
-              TextFormField(
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  prefixIcon: Icon(Icons.phone),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your phone number';
-                  }
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: Appcolors.secondaryText,
+          ),
+        ),
 
-                  if (value.length != 10) {
-                    return 'Enter a valid 10-digit phone number';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // Email
-              TextFormField(
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email Address',
-                  prefixIcon: Icon(Icons.email),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your email';
-                  }
-
-                  if (!value.contains('@')) {
-                    return 'Please enter a valid email';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // Password
-              TextFormField(
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: Icon(Icons.lock),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a password';
-                  }
-
-                  if (value.length < 6) {
-                    return 'Password must be at least 6 characters';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // Town / Locality
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'Town / Locality',
-                  prefixIcon: Icon(Icons.location_city),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your town/locality';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // House Number
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'House No.',
-                  prefixIcon: Icon(Icons.home),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your house number';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // State
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'State',
-                  prefixIcon: Icon(Icons.map),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your state';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // City
-              TextFormField(
-                decoration: const InputDecoration(
-                  labelText: 'City',
-                  prefixIcon: Icon(Icons.map),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your city';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // PIN Code
-              TextFormField(
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'PIN Code',
-                  prefixIcon: Icon(Icons.pin_drop),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your PIN code';
-                  }
-
-                  if (value.length != 6) {
-                    return 'Enter a valid 6-digit PIN code';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // Blood Group
-              DropdownButtonFormField<String>(
-                value: selectedBloodGroup,
-
-                decoration: const InputDecoration(
-                  labelText: 'Blood Group',
-                  prefixIcon: Icon(Icons.bloodtype),
-                ),
-
-                items: bloodGroups.map((group) {
-                  return DropdownMenuItem(
-                    value: group,
-                    child: Text(group),
-                  );
-                }).toList(),
-
-                onChanged: (value) {
-                  setState(() {
-                    selectedBloodGroup = value;
-                  });
-                },
-
-                validator: (value) {
-                  if (value == null) {
-                    return 'Please select your blood group';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 16),
-
-              // Emergency Contact Number
-              TextFormField(
-                keyboardType: TextInputType.phone,
-
-                decoration: const InputDecoration(
-                  labelText: 'Emergency Contact Number',
-                  prefixIcon: Icon(Icons.emergency),
-                  hintText: 'Example: 112',
-                ),
-
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter an emergency number';
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 30),
-
-              // Register Button
-              SizedBox(
-                width: double.infinity,
-                height: 55,
-
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Appcolors.primary,
-                    foregroundColor: Colors.white,
-
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Registration successful!',
-                          ),
-                        ),
-                      );
-                    }
-                  },
-
-                  child: const Text(
-                    'REGISTER',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-            ],
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(
+            color: Appcolors.primary,
+            width: 2,
           ),
         ),
       ),
     );
+  }
+
+  // ---------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------
+
+  @override
+  Widget build(BuildContext context) {
+
+    return Scaffold(
+
+      appBar: AppBar(
+        backgroundColor: Appcolors.primary,
+        foregroundColor: Appcolors.primaryText,
+        centerTitle: true,
+
+        title: const Text(
+          'Create Account',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+
+      body: Column(
+        children: [
+
+          // -------------------------------------------------
+          // STEP INDICATOR
+          // -------------------------------------------------
+
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 25,
+              vertical: 20,
+            ),
+
+            child: Row(
+              children: [
+
+                stepIndicator(
+                  number: '1',
+                  title: 'Account',
+                  active: currentStep >= 0,
+                ),
+
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    color: currentStep >= 1
+                        ? Appcolors.surface
+                        : Appcolors.surface,
+                  ),
+                ),
+
+                stepIndicator(
+                  number: '2',
+                  title: 'Personal',
+                  active: currentStep >= 1,
+                ),
+
+                Expanded(
+                  child: Container(
+                    height: 2,
+                    color: currentStep >= 2
+                        ? Appcolors.primary
+                        : Appcolors.surface,
+                  ),
+                ),
+
+                stepIndicator(
+                  number: '3',
+                  title: 'Emergency',
+                  active: currentStep >= 2,
+                ),
+              ],
+            ),
+          ),
+
+          // -------------------------------------------------
+          // PAGES
+          // -------------------------------------------------
+
+          Expanded(
+            child: PageView(
+              controller: pageController,
+              physics: const NeverScrollableScrollPhysics(),
+
+              children: [
+
+                accountPage(),
+
+                personalPage(),
+
+                emergencyPage(),
+
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------
+  // STEP INDICATOR
+  // ---------------------------------------------------------
+
+  Widget stepIndicator({
+    required String number,
+    required String title,
+    required bool active,
+  }) {
+
+    return Column(
+      children: [
+
+        CircleAvatar(
+          radius: 18,
+
+          backgroundColor:
+              active ? Appcolors.primary : Appcolors.surface,
+
+          child: Text(
+            number,
+            style: TextStyle(
+              color: active
+                  ? Colors.white
+                  : Appcolors.primaryText,
+             fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 5),
+
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: active
+                ? FontWeight.bold
+                : FontWeight.normal,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // =========================================================
+  // STEP 1 - ACCOUNT
+  // =========================================================
+
+  Widget accountPage() {
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+
+        children: [
+
+          const Text(
+            'Step 1',
+            style: TextStyle(
+              color: Appcolors.deepBlue,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 5),
+
+          const Text(
+            'Create your account',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            'Enter your basic account information.',
+            style: TextStyle(
+              color: Appcolors.secondaryText,
+              fontSize: 15,
+            ),
+          ),
+
+          const SizedBox(height: 25),
+
+          inputField(
+            label: 'Full Name',
+            icon: Icons.person,
+            controller: fullNameController,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'Email Address',
+            icon: Icons.email,
+            controller: emailController,
+            keyboardType: TextInputType.emailAddress,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'Phone Number',
+            icon: Icons.phone,
+            controller: phoneController,
+            keyboardType: TextInputType.phone,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'Password',
+            icon: Icons.lock,
+            controller: passwordController,
+            obscureText: true,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'Confirm Password',
+            icon: Icons.lock_outline,
+            controller: confirmPasswordController,
+            obscureText: true,
+          ),
+
+          const SizedBox(height: 30),
+
+          // NEXT BUTTON
+
+          SizedBox(
+            width: double.infinity,
+            height: 55,
+
+            child: ElevatedButton(
+              onPressed: nextPage,
+
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Appcolors.primary,
+                foregroundColor: Appcolors.primaryText,
+
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+
+              child: const Text(
+                'NEXT  →',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================
+  // STEP 2 - PERSONAL INFORMATION
+  // =========================================================
+
+  Widget personalPage() {
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+
+        children: [
+
+          const Text(
+            'Step 2',
+            style: TextStyle(
+              color: Appcolors.primary,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 5),
+
+          const Text(
+            'Personal Information',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            'Enter your personal and address details.',
+            style: TextStyle(
+              color: Appcolors.secondaryText,
+              fontSize: 15,
+            ),
+          ),
+
+          const SizedBox(height: 25),
+
+          // DATE OF BIRTH
+
+          TextFormField(
+            readOnly: true,
+
+            onTap: selectDate,
+
+            decoration: InputDecoration(
+              labelText: 'Date of Birth',
+              prefixIcon: const Icon(
+                Icons.calendar_month,
+              ),
+
+              filled: true,
+              fillColor: Colors.grey.shade50,
+
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+
+            controller: TextEditingController(
+              text: dateOfBirth == null
+                  ? ''
+                  : '${dateOfBirth!.day}/'
+                    '${dateOfBirth!.month}/'
+                    '${dateOfBirth!.year}',
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // BLOOD GROUP
+
+          DropdownButtonFormField<String>(
+
+            value: selectedBloodGroup,
+
+            decoration: InputDecoration(
+              labelText: 'Blood Group',
+              prefixIcon: const Icon(
+                Icons.bloodtype,
+              ),
+
+              filled: true,
+              fillColor: Colors.grey.shade50,
+
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+
+            items: bloodGroups.map(
+              (group) {
+
+                return DropdownMenuItem(
+                  value: group,
+                  child: Text(group),
+                );
+              },
+            ).toList(),
+
+            onChanged: (value) {
+
+              setState(() {
+                selectedBloodGroup = value;
+              });
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'House No.',
+            icon: Icons.home,
+            controller: houseController,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'Town / Locality',
+            icon: Icons.location_on,
+            controller: townController,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'City',
+            icon: Icons.location_city,
+            controller: cityController,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'State',
+            icon: Icons.map,
+            controller: stateController,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'PIN Code',
+            icon: Icons.pin_drop,
+            controller: pinController,
+            keyboardType: TextInputType.number,
+          ),
+
+          const SizedBox(height: 30),
+
+          // BACK + NEXT
+
+          Row(
+            children: [
+
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: previousPage,
+
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(
+                      double.infinity,
+                      55,
+                    ),
+
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(14),
+                    ),
+                  ),
+
+                  child: const Text(
+                    '←  BACK',
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: nextPage,
+
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Appcolors.primary,
+                    foregroundColor: Appcolors.primaryText,
+
+                    minimumSize: const Size(
+                      double.infinity,
+                      55,
+                    ),
+
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(14),
+                    ),
+                  ),
+
+                  child: const Text(
+                    'NEXT  →',
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================
+  // STEP 3 - EMERGENCY CONTACT
+  // =========================================================
+
+  Widget emergencyPage() {
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+
+        children: [
+
+          const Text(
+            'Step 3',
+            style: TextStyle(
+              color: Appcolors.primary,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 5),
+
+          const Text(
+            'Emergency Contact',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            'Add a trusted contact for emergencies.',
+            style: TextStyle(
+              color: Appcolors.secondaryText,
+              fontSize: 15,
+            ),
+          ),
+
+          const SizedBox(height: 25),
+
+          inputField(
+            label: 'Contact Name',
+            icon: Icons.person_outline,
+            controller: contactNameController,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'Contact Number',
+            icon: Icons.phone,
+            controller: contactNumberController,
+            keyboardType: TextInputType.phone,
+          ),
+
+          const SizedBox(height: 16),
+
+          inputField(
+            label: 'Emergency Dial Number',
+            icon: Icons.emergency,
+            controller: emergencyDialController,
+            keyboardType: TextInputType.phone,
+          ),
+
+          const SizedBox(height: 12),
+
+          // Emergency information box
+
+          Container(
+            padding: const EdgeInsets.all(15),
+
+            decoration: BoxDecoration(
+              color: Appcolors.deepBlue,
+
+              borderRadius: BorderRadius.circular(14),
+
+              border: Border.all(
+                color: Appcolors.primary,
+              ),
+            ),
+
+            child: Row(
+              children: [
+
+                Icon(
+                  Icons.info_outline,
+                  color: Appcolors.warning,
+                ),
+
+                const SizedBox(width: 10),
+
+                Expanded(
+                  child: Text(
+                    'Make sure the emergency contact number '
+                    'is correct and reachable.',
+                    style: TextStyle(
+                      color: Appcolors.warning,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 30),
+
+          // BACK + REGISTER
+
+          Row(
+            children: [
+
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: previousPage,
+
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(
+                      double.infinity,
+                      55,
+                    ),
+
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(14),
+                    ),
+                  ),
+
+                  child: const Text(
+                    '←  BACK',
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: nextPage,
+
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Appcolors.primary,
+                    foregroundColor: Appcolors.primaryText,
+
+                    minimumSize: const Size(
+                      double.infinity,
+                      55,
+                    ),
+
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(14),
+                    ),
+                  ),
+
+                  child: const Text(
+                    'REGISTER',
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------
+  // DISPOSE
+  // ---------------------------------------------------------
+
+  @override
+  void dispose() {
+
+    fullNameController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    passwordController.dispose();
+    confirmPasswordController.dispose();
+
+    houseController.dispose();
+    townController.dispose();
+    cityController.dispose();
+    stateController.dispose();
+    pinController.dispose();
+
+    contactNameController.dispose();
+    contactNumberController.dispose();
+    emergencyDialController.dispose();
+
+    pageController.dispose();
+
+    super.dispose();
   }
 }
