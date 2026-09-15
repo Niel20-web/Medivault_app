@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../utils/appcolors.dart';
+import 'registration.dart';
 
 class login_screen extends StatelessWidget {
   const login_screen({super.key});
@@ -134,7 +135,12 @@ class login_screen extends StatelessWidget {
                       ),
                       TextButton(
                         onPressed: () {
-                          // Navigate to Register screen later
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const RegistrationPage(),
+                            ),
+                          );
                         },
                         child: const Text(
                           'Register',

@@ -1,28 +1,6 @@
 import 'package:flutter/material.dart';
+
 import '../utils/appcolors.dart';
-
-class MedivaultApp extends StatelessWidget {
-  const MedivaultApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Registration Page',
-      theme: ThemeData(
-        primaryColor: Appcolors.cyan,
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          filled: true,
-          fillColor: Colors.white,
-        ),
-      ),
-      home: const RegistrationPage(),
-    );
-  }
-}
 
 class RegistrationPage extends StatefulWidget {
   const RegistrationPage({super.key});
@@ -34,7 +12,24 @@ class RegistrationPage extends StatefulWidget {
 class _RegistrationPageState extends State<RegistrationPage> {
   final _formKey = GlobalKey<FormState>();
 
+  DateTime? selectedDate;
   String? selectedBloodGroup;
+
+  // Date of Birth Picker
+  Future<void> selectDate() async {
+    DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime(2000),
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+
+    if (pickedDate != null) {
+      setState(() {
+        selectedDate = pickedDate;
+      });
+    }
+  }
 
   final List<String> bloodGroups = [
     'A+',
@@ -110,6 +105,29 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
               const SizedBox(height: 16),
 
+              // Date of Birth
+              TextFormField(
+                readOnly: true,
+                decoration: const InputDecoration(
+                  labelText: 'Date of Birth',
+                  prefixIcon: Icon(Icons.calendar_month),
+                ),
+                controller: TextEditingController(
+                  text: selectedDate == null
+                      ? ''
+                      : '${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}',
+                ),
+                onTap: selectDate,
+                validator: (value) {
+                  if (selectedDate == null) {
+                    return 'Please select your date of birth';
+                  }
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 16),
+
               // Phone Number
               TextFormField(
                 keyboardType: TextInputType.phone,
@@ -132,6 +150,50 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
               const SizedBox(height: 16),
 
+              // Email
+              TextFormField(
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email Address',
+                  prefixIcon: Icon(Icons.email),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your email';
+                  }
+
+                  if (!value.contains('@')) {
+                    return 'Please enter a valid email';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 16),
+
+              // Password
+              TextFormField(
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: Icon(Icons.lock),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter a password';
+                  }
+
+                  if (value.length < 6) {
+                    return 'Password must be at least 6 characters';
+                  }
+
+                  return null;
+                },
+              ),
+
+              const SizedBox(height: 16),
+
               // Town / Locality
               TextFormField(
                 decoration: const InputDecoration(
@@ -142,6 +204,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your town/locality';
                   }
+
                   return null;
                 },
               ),
@@ -158,6 +221,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your house number';
                   }
+
                   return null;
                 },
               ),
@@ -174,6 +238,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your state';
                   }
+
                   return null;
                 },
               ),
@@ -190,10 +255,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your city';
                   }
+
                   return null;
                 },
               ),
-          
+
               const SizedBox(height: 16),
 
               // PIN Code
@@ -244,24 +310,28 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   if (value == null) {
                     return 'Please select your blood group';
                   }
+
                   return null;
                 },
               ),
 
               const SizedBox(height: 16),
 
-              // Emergency Dial Number
+              // Emergency Contact Number
               TextFormField(
                 keyboardType: TextInputType.phone,
+
                 decoration: const InputDecoration(
-                  labelText: 'Emergency Dial Number',
+                  labelText: 'Emergency Contact Number',
                   prefixIcon: Icon(Icons.emergency),
                   hintText: 'Example: 112',
                 ),
+
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter an emergency number';
                   }
+
                   return null;
                 },
               ),
@@ -275,8 +345,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor:Appcolors.primary,
+                    backgroundColor: Appcolors.primary,
                     foregroundColor: Colors.white,
+
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
