@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../utils/appcolors.dart';
+import 'medical_record_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,7 +15,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _pages = const [
     HomeContent(),
-    PlaceholderScreen(title: 'Medical Records'),
+    MedicalRecordsScreen(),
     PlaceholderScreen(title: 'Medical ID'),
     PlaceholderScreen(title: 'Profile'),
   ];
