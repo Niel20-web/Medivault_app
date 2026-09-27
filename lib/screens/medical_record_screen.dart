@@ -14,7 +14,6 @@ class MedicalRecordsScreen extends StatefulWidget {
 class _MedicalRecordsScreenState
     extends State<MedicalRecordsScreen> {
   String selectedFilter = 'All';
-
   String searchQuery = '';
 
   @override
@@ -31,6 +30,13 @@ class _MedicalRecordsScreenState
           'Vitals Blood Pressure Heart Rate SpO2 Temperature',
         );
 
+    final bool showDocuments =
+        (selectedFilter == 'All' ||
+            selectedFilter == 'Documents') &&
+        _matchesSearch(
+          'Blood Test Lab Report Imaging Report Chest X-Ray Discharge Summary Medical Certificate',
+        );
+
     return Scaffold(
       backgroundColor: Appcolors.background,
       body: SafeArea(
@@ -39,6 +45,7 @@ class _MedicalRecordsScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Title
               Text(
                 'Medical Records',
                 style: TextStyle(
@@ -95,29 +102,26 @@ class _MedicalRecordsScreenState
               const SizedBox(height: 20),
 
               // Filter chips
-              Row(
-                children: [
-                  _buildFilterChip(
-                    label: 'All',
-                  ),
-
-                  const SizedBox(width: 10),
-
-                  _buildFilterChip(
-                    label: 'Diagnoses',
-                  ),
-
-                  const SizedBox(width: 10),
-
-                  _buildFilterChip(
-                    label: 'Vitals',
-                  ),
-                ],
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildFilterChip(label: 'All'),
+                    const SizedBox(width: 10),
+                    _buildFilterChip(label: 'Diagnoses'),
+                    const SizedBox(width: 10),
+                    _buildFilterChip(label: 'Vitals'),
+                    const SizedBox(width: 10),
+                    _buildFilterChip(label: 'Documents'),
+                  ],
+                ),
               ),
 
               const SizedBox(height: 24),
 
-              // Diagnosis
+              // -------------------------
+              // DIAGNOSES
+              // -------------------------
               if (showDiagnosis) ...[
                 Text(
                   'Recent Diagnoses',
@@ -133,7 +137,9 @@ class _MedicalRecordsScreenState
                 _buildDiagnosisCard(),
               ],
 
-              // Vitals
+              // -------------------------
+              // VITALS
+              // -------------------------
               if (showVitals) ...[
                 const SizedBox(height: 16),
 
@@ -153,8 +159,64 @@ class _MedicalRecordsScreenState
                 _buildVitalsCard(),
               ],
 
-              // No results
-              if (!showDiagnosis && !showVitals) ...[
+              // -------------------------
+              // DOCUMENTS
+              // -------------------------
+              if (showDocuments) ...[
+                const SizedBox(height: 24),
+
+                Text(
+                  'Medical Documents',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Appcolors.primaryText,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                _buildDocumentCard(
+                  title: 'Blood Test Report',
+                  type: 'Lab Report',
+                  date: '18 September 2026',
+                  icon: Icons.science_outlined,
+                ),
+
+                const SizedBox(height: 12),
+
+                _buildDocumentCard(
+                  title: 'Chest X-Ray',
+                  type: 'Imaging Report',
+                  date: '15 September 2026',
+                  icon: Icons.image_outlined,
+                ),
+
+                const SizedBox(height: 12),
+
+                _buildDocumentCard(
+                  title: 'Discharge Summary',
+                  type: 'Discharge Summary',
+                  date: '10 September 2026',
+                  icon: Icons.description_outlined,
+                ),
+
+                const SizedBox(height: 12),
+
+                _buildDocumentCard(
+                  title: 'Medical Certificate',
+                  type: 'Medical Certificate',
+                  date: '08 September 2026',
+                  icon: Icons.verified_outlined,
+                ),
+              ],
+
+              // -------------------------
+              // NO RESULTS
+              // -------------------------
+              if (!showDiagnosis &&
+                  !showVitals &&
+                  !showDocuments) ...[
                 const SizedBox(height: 30),
 
                 Center(
@@ -197,6 +259,10 @@ class _MedicalRecordsScreenState
     );
   }
 
+  // -------------------------
+  // SEARCH
+  // -------------------------
+
   bool _matchesSearch(String text) {
     if (searchQuery.trim().isEmpty) {
       return true;
@@ -206,6 +272,10 @@ class _MedicalRecordsScreenState
         .toLowerCase()
         .contains(searchQuery.trim().toLowerCase());
   }
+
+  // -------------------------
+  // FILTER CHIP
+  // -------------------------
 
   Widget _buildFilterChip({
     required String label,
@@ -247,6 +317,10 @@ class _MedicalRecordsScreenState
       ),
     );
   }
+
+  // -------------------------
+  // DIAGNOSIS CARD
+  // -------------------------
 
   Widget _buildDiagnosisCard() {
     return GestureDetector(
@@ -331,7 +405,8 @@ class _MedicalRecordsScreenState
                         Appcolors.success.withValues(
                       alpha: 0.1,
                     ),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius:
+                        BorderRadius.circular(20),
                   ),
                   child: Text(
                     'Active',
@@ -378,6 +453,10 @@ class _MedicalRecordsScreenState
       ),
     );
   }
+
+  // -------------------------
+  // VITALS CARD
+  // -------------------------
 
   Widget _buildVitalsCard() {
     return GestureDetector(
@@ -534,6 +613,10 @@ class _MedicalRecordsScreenState
     );
   }
 
+  // -------------------------
+  // VITAL ITEM
+  // -------------------------
+
   Widget _buildVitalItem({
     required String label,
     required String value,
@@ -576,6 +659,123 @@ class _MedicalRecordsScreenState
               fontSize: 11,
               color: Appcolors.secondaryText,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------
+  // DOCUMENT CARD
+  // -------------------------
+
+  Widget _buildDocumentCard({
+    required String title,
+    required String type,
+    required String date,
+    required IconData icon,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Appcolors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Appcolors.border,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Document icon
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: Appcolors.primary.withValues(
+                alpha: 0.1,
+              ),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(
+              icon,
+              color: Appcolors.primary,
+              size: 24,
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // Document information
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Appcolors.primaryText,
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                Text(
+                  type,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Appcolors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today_outlined,
+                      size: 13,
+                      color: Appcolors.secondaryText,
+                    ),
+
+                    const SizedBox(width: 5),
+
+                    Text(
+                      date,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Appcolors.secondaryText,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Download button
+          IconButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Document download will be connected to the backend.',
+                  ),
+                ),
+              );
+            },
+            icon: Icon(
+              Icons.download_outlined,
+              color: Appcolors.primary,
+            ),
+            tooltip: 'Download',
           ),
         ],
       ),

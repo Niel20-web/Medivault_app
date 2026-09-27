@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
 import '../utils/appcolors.dart';
 import 'medical_record_screen.dart';
+import 'medical_timeline_screen.dart';
+import 'medical_id_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,54 +16,46 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = const [
-    HomeContent(),
-    MedicalRecordsScreen(),
-    PlaceholderScreen(title: 'Medical ID'),
-    PlaceholderScreen(title: 'Profile'),
-  ];
-
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
   }
 
+  late final List<Widget> _pages = [
+    HomeContent(
+      onNavigate: _onItemTapped,
+    ),
+    const MedicalRecordsScreen(),
+    const MedicalIdScreen(),
+    const MedicalTimelineScreen(),
+    const PlaceholderScreen(title: 'Profile'),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Appcolors.background,
 
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Fixed MediVault header
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 18,
-              ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-              ),
-              child: Text(
-                'MediVault',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                  color: Appcolors.primary,
-                ),
-              ),
-            ),
-
-            // Page content
-            Expanded(
-              child: _pages[_selectedIndex],
-            ),
-          ],
+      // Fixed header
+      appBar: AppBar(
+        backgroundColor: Appcolors.background,
+        elevation: 0,
+        centerTitle: false,
+        title: const Text(
+          'MediVault',
+          style: TextStyle(
+            color: Appcolors.primaryText,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
         ),
+      ),
+
+      // Main page
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
       ),
 
       // Fixed bottom navigation
@@ -68,11 +63,9 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
         selectedItemColor: Appcolors.primary,
         unselectedItemColor: Appcolors.secondaryText,
-        elevation: 8,
-
+        backgroundColor: Appcolors.surface,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
@@ -80,14 +73,19 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Home',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.description_outlined),
-            activeIcon: Icon(Icons.description),
+            icon: Icon(Icons.folder_outlined),
+            activeIcon: Icon(Icons.folder),
             label: 'Records',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.qr_code_2_outlined),
-            activeIcon: Icon(Icons.qr_code_2),
+            icon: Icon(Icons.badge_outlined),
+            activeIcon: Icon(Icons.badge),
             label: 'Medical ID',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.timeline_outlined),
+            activeIcon: Icon(Icons.timeline),
+            label: 'Timeline',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
@@ -106,9 +104,13 @@ class _HomeScreenState extends State<HomeScreen> {
 // ============================================================
 
 class HomeContent extends StatelessWidget {
-  const HomeContent({super.key});
+  final ValueChanged<int> onNavigate;
 
-  // Dynamic greeting based on current time
+  const HomeContent({
+    super.key,
+    required this.onNavigate,
+  });
+
   String getGreeting() {
     final hour = DateTime.now().hour;
 
@@ -126,17 +128,16 @@ class HomeContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 30),
-
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
 
-          // Dynamic greeting
+          // Greeting
           Text(
             '${getGreeting()}, Nathan 👋',
-            style: TextStyle(
-              fontSize: 25,
+            style: const TextStyle(
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: Appcolors.primaryText,
             ),
@@ -144,37 +145,27 @@ class HomeContent extends StatelessWidget {
 
           const SizedBox(height: 6),
 
-          Text(
-            'Your health records, all in one place.',
+          const Text(
+            'Your health. Your records. Your control.',
             style: TextStyle(
               fontSize: 14,
               color: Appcolors.secondaryText,
             ),
           ),
 
-          const SizedBox(height: 25),
+          const SizedBox(height: 24),
 
-          // Medical ID heading
-          Text(
-            'Medical ID',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Appcolors.primaryText,
-            ),
-          ),
+          // ==================================================
+          // MEDICAL ID CARD
+          // ==================================================
 
-          const SizedBox(height: 12),
-
-          // Medical ID Card
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Appcolors.primary,
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(20),
             ),
-
             child: Row(
               children: [
 
@@ -184,65 +175,50 @@ class HomeContent extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
 
-                      Text(
-                        'MEDICAL ID',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.5,
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                      ),
-
-                      const SizedBox(height: 14),
-
                       const Text(
-                        'Nathan',
+                        'Medical ID',
                         style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: Colors.white70,
+                          fontSize: 14,
                         ),
                       ),
 
                       const SizedBox(height: 6),
 
-                      Text(
-                        'Patient ID',
+                      const Text(
+                        'Nathan',
                         style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.white.withOpacity(0.75),
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
 
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 6),
 
                       const Text(
-                        'MV-10294',
+                        'Patient ID: MV-10294',
                         style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
                           color: Colors.white,
+                          fontSize: 13,
                         ),
                       ),
 
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 12),
 
                       Row(
-                        children: [
+                        children: const [
                           Icon(
                             Icons.lock_outline,
-                            size: 15,
-                            color: Colors.white.withOpacity(0.85),
+                            color: Colors.white70,
+                            size: 16,
                           ),
-
-                          const SizedBox(width: 5),
-
+                          SizedBox(width: 5),
                           Text(
                             'Securely stored',
                             style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white.withOpacity(0.85),
+                              color: Colors.white70,
+                              fontSize: 12,
                             ),
                           ),
                         ],
@@ -251,17 +227,13 @@ class HomeContent extends StatelessWidget {
                   ),
                 ),
 
-                const SizedBox(width: 12),
-
                 // QR Code
                 Container(
                   padding: const EdgeInsets.all(8),
-
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(14),
                   ),
-
                   child: QrImageView(
                     data: 'MV-10294',
                     version: QrVersions.auto,
@@ -275,80 +247,109 @@ class HomeContent extends StatelessWidget {
 
           const SizedBox(height: 28),
 
-          // Quick Access heading
-          Text(
+          // ==================================================
+          // QUICK ACCESS
+          // ==================================================
+
+          const Text(
             'Quick Access',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
               color: Appcolors.primaryText,
             ),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
-          // Row 1
-          Row(
+          GridView.count(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 0.95,
             children: [
+
+              // Medical Records
               QuickAccessCard(
-                icon: Icons.description_outlined,
+                icon: Icons.folder_outlined,
                 title: 'Medical Records',
                 subtitle: 'View your reports',
+                onTap: () {
+                  onNavigate(1);
+                },
               ),
 
-              const SizedBox(width: 12),
-
+              // Medical Timeline
               QuickAccessCard(
-                icon: Icons.timeline,
+                icon: Icons.timeline_outlined,
                 title: 'Medical Timeline',
                 subtitle: 'View your history',
+                onTap: () {
+                  onNavigate(3);
+                },
               ),
-            ],
-          ),
 
-          const SizedBox(height: 12),
-
-          // Row 2
-          Row(
-            children: [
+              // Medical ID
               QuickAccessCard(
-                icon: Icons.qr_code_2,
+                icon: Icons.badge_outlined,
                 title: 'Medical ID',
                 subtitle: 'Show your QR',
+                onTap: () {
+                  onNavigate(2);
+                },
               ),
 
-              const SizedBox(width: 12),
-
+              // Prescriptions
               QuickAccessCard(
                 icon: Icons.medication_outlined,
                 title: 'Prescriptions',
                 subtitle: 'View your medicines',
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Prescriptions screen coming soon',
+                      ),
+                    ),
+                  );
+                },
               ),
-            ],
-          ),
 
-          const SizedBox(height: 12),
-
-          // Row 3
-          Row(
-            children: [
+              // Access Permissions
               QuickAccessCard(
                 icon: Icons.security_outlined,
                 title: 'Access Permissions',
                 subtitle: 'Manage access',
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Access Permissions coming soon',
+                      ),
+                    ),
+                  );
+                },
               ),
 
-              const SizedBox(width: 12),
-
+              // Notifications
               QuickAccessCard(
-                icon: Icons.notifications_none,
+                icon: Icons.notifications_none_outlined,
                 title: 'Notifications',
                 subtitle: 'View updates',
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Notifications screen coming soon',
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
-
-          const SizedBox(height: 10),
         ],
       ),
     );
@@ -361,63 +362,75 @@ class HomeContent extends StatelessWidget {
 // ============================================================
 
 class QuickAccessCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
   const QuickAccessCard({
     super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.onTap,
   });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        height: 150,
-        padding: const EdgeInsets.all(16),
-
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: Appcolors.border,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Appcolors.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: Appcolors.border,
+            ),
           ),
-        ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
 
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-
-            Icon(
-              icon,
-              size: 30,
-              color: Appcolors.primary,
-            ),
-
-            const Spacer(),
-
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: Appcolors.primaryText,
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Appcolors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: Appcolors.primary,
+                  size: 26,
+                ),
               ),
-            ),
 
-            const SizedBox(height: 4),
+              const SizedBox(height: 14),
 
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 12,
-                color: Appcolors.secondaryText,
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Appcolors.primaryText,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
+
+              const SizedBox(height: 5),
+
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Appcolors.secondaryText,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -426,23 +439,23 @@ class QuickAccessCard extends StatelessWidget {
 
 
 // ============================================================
-// TEMPORARY PLACEHOLDER SCREENS
+// PLACEHOLDER SCREEN
 // ============================================================
 
 class PlaceholderScreen extends StatelessWidget {
+  final String title;
+
   const PlaceholderScreen({
     super.key,
     required this.title,
   });
-
-  final String title;
 
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Text(
         title,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 24,
           fontWeight: FontWeight.bold,
           color: Appcolors.primaryText,
