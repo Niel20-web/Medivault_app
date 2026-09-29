@@ -15,6 +15,7 @@ class ApiService {
       Uri.parse('$baseUrl$endpoint'),
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         if (token != null) 'Authorization': 'Bearer $token',
       },
       body: body != null ? jsonEncode(body) : null,

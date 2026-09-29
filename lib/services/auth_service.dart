@@ -19,14 +19,25 @@ class AuthService {
       },
     );
 
+    print('LOGIN STATUS: ${response.statusCode}');
+    print('LOGIN RESPONSE: ${response.body}');
+
     final data = jsonDecode(response.body);
 
     if (response.statusCode == 200) {
-      final accessToken = data['accessToken'];
+      final String? accessToken = data['data']?['accessToken'] as String?;
+
+      print('ACCESS TOKEN RECEIVED: ${accessToken != null}');
+
+      if (accessToken == null) {
+        throw Exception(
+          'Login succeeded but the backend did not return accessToken.',
+        );
+      }
 
       await _authStorage.saveAccessToken(accessToken);
 
-      return data;
+      return Map<String, dynamic>.from(data);
     }
 
     throw Exception(
