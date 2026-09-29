@@ -1,22 +1,20 @@
 import 'package:flutter/material.dart';
 
-//import 'screens/welcome_screen.dart';
-//import 'screens/login_screen.dart';
-//import 'screens/registration.dart';
-import 'screens/homescreen.dart';
+import 'screens/welcome_screen.dart';
 
 void main() {
-	runApp(const MedivaultApp());
+  runApp(const MedivaultApp());
 }
 
 class MedivaultApp extends StatelessWidget {
-	const MedivaultApp({super.key});
+  const MedivaultApp({super.key});
 
-	@override
-	Widget build(BuildContext context) {
-		return MaterialApp(
-			home: HomeScreen(),
-		);
-	}
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'MediVault',
+      home: const WelcomeScreen(),
+    );
+  }
 }
-

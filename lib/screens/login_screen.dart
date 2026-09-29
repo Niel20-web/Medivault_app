@@ -1,10 +1,81 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
 import '../utils/appcolors.dart';
+import 'homescreen.dart';
 import 'registration.dart';
 
-class login_screen extends StatelessWidget {
+class login_screen extends StatefulWidget {
   const login_screen({super.key});
+
+  @override
+  State<login_screen> createState() => _login_screenState();
+}
+
+class _login_screenState extends State<login_screen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  final AuthService _authService = AuthService();
+
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your email and password.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await _authService.login(
+        email: email,
+        password: password,
+      );
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const HomeScreen(),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', ''),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,9 +96,7 @@ class login_screen extends StatelessWidget {
                     width: 90,
                     height: 90,
                   ),
-
                   const SizedBox(height: 20),
-
                   Text(
                     'Welcome Back',
                     style: TextStyle(
@@ -36,9 +105,7 @@ class login_screen extends StatelessWidget {
                       color: Appcolors.primaryText,
                     ),
                   ),
-
                   const SizedBox(height: 8),
-
                   Text(
                     'Sign in to your account',
                     style: TextStyle(
@@ -46,15 +113,16 @@ class login_screen extends StatelessWidget {
                       color: Appcolors.secondaryText,
                     ),
                   ),
-
                   const SizedBox(height: 30),
 
                   SizedBox(
                     width: 320,
                     child: TextField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         hintText: 'Email address',
-                        prefixIcon: Icon(Icons.email_outlined),
+                        prefixIcon: const Icon(Icons.email_outlined),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -67,10 +135,11 @@ class login_screen extends StatelessWidget {
                   SizedBox(
                     width: 320,
                     child: TextField(
+                      controller: _passwordController,
                       obscureText: true,
                       decoration: InputDecoration(
                         hintText: 'Password',
-                        prefixIcon: Icon(Icons.lock_outline),
+                        prefixIcon: const Icon(Icons.lock_outline),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -84,9 +153,7 @@ class login_screen extends StatelessWidget {
                     width: 320,
                     height: 55,
                     child: ElevatedButton(
-                      onPressed: () {
-                        // Login logic will go here later
-                      },
+                      onPressed: _isLoading ? null : _login,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Appcolors.primary,
                         foregroundColor: Colors.white,
@@ -95,13 +162,22 @@ class login_screen extends StatelessWidget {
                         ),
                         elevation: 0,
                       ),
-                      child: const Text(
-                        'Login',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Login',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                     ),
                   ),
 
@@ -138,7 +214,8 @@ class login_screen extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const RegistrationPage(),
+                              builder: (context) =>
+                                  const RegistrationPage(),
                             ),
                           );
                         },
