@@ -2,23 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
 import '../utils/appcolors.dart';
+
 import 'homescreen.dart';
 import 'registration.dart';
 
-class login_screen extends StatefulWidget {
-  const login_screen({super.key});
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<login_screen> createState() => _login_screenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _login_screenState extends State<login_screen> {
+class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
   final AuthService _authService = AuthService();
 
   bool _isLoading = false;
+  bool _isPasswordVisible = false;
 
   @override
   void dispose() {
@@ -96,7 +97,9 @@ class _login_screenState extends State<login_screen> {
                     width: 90,
                     height: 90,
                   ),
+
                   const SizedBox(height: 20),
+
                   Text(
                     'Welcome Back',
                     style: TextStyle(
@@ -105,7 +108,9 @@ class _login_screenState extends State<login_screen> {
                       color: Appcolors.primaryText,
                     ),
                   ),
+
                   const SizedBox(height: 8),
+
                   Text(
                     'Sign in to your account',
                     style: TextStyle(
@@ -113,6 +118,7 @@ class _login_screenState extends State<login_screen> {
                       color: Appcolors.secondaryText,
                     ),
                   ),
+
                   const SizedBox(height: 30),
 
                   SizedBox(
@@ -136,10 +142,25 @@ class _login_screenState extends State<login_screen> {
                     width: 320,
                     child: TextField(
                       controller: _passwordController,
-                      obscureText: true,
+                      obscureText: !_isPasswordVisible,
                       decoration: InputDecoration(
                         hintText: 'Password',
                         prefixIcon: const Icon(Icons.lock_outline),
+
+                        // 👁️ View password button
+                        suffixIcon: IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _isPasswordVisible = !_isPasswordVisible;
+                            });
+                          },
+                          icon: Icon(
+                            _isPasswordVisible
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                        ),
+
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),

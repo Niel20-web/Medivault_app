@@ -4,15 +4,76 @@ import '../utils/appcolors.dart';
 
 class MedicalRecordDetailScreen extends StatelessWidget {
   final String type;
+  final Map<String, dynamic> record;
 
   const MedicalRecordDetailScreen({
     super.key,
     required this.type,
+    required this.record,
   });
+
+  Map<String, dynamic> get data {
+    final recordData = record['data'];
+
+    if (recordData is Map) {
+      return Map<String, dynamic>.from(recordData);
+    }
+
+    return {};
+  }
+
+  bool get isDiagnosis => type == 'diagnosis';
+
+  bool get isVital => type == 'vital';
+
+  String _formatDate(dynamic value) {
+    if (value == null || value.toString().isEmpty) {
+      return 'Not available';
+    }
+
+    try {
+      final date = DateTime.parse(value.toString());
+
+      const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
+
+      return '${date.day} ${months[date.month - 1]} ${date.year}';
+    } catch (_) {
+      return value.toString();
+    }
+  }
+
+  String _value(dynamic value) {
+    if (value == null || value.toString().isEmpty) {
+      return 'Not available';
+    }
+
+    return value.toString();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bool isDiagnosis = type == 'diagnosis';
+    String title;
+
+    if (isDiagnosis) {
+      title = 'Medical Record';
+    } else if (isVital) {
+      title = 'Vital Record';
+    } else {
+      title = 'Medical Record';
+    }
 
     return Scaffold(
       backgroundColor: Appcolors.background,
@@ -20,7 +81,7 @@ class MedicalRecordDetailScreen extends StatelessWidget {
         backgroundColor: Appcolors.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(
+          icon: const Icon(
             Icons.arrow_back,
             color: Appcolors.primaryText,
           ),
@@ -29,8 +90,8 @@ class MedicalRecordDetailScreen extends StatelessWidget {
           },
         ),
         title: Text(
-          isDiagnosis ? 'Medical Record' : 'Vital Record',
-          style: TextStyle(
+          title,
+          style: const TextStyle(
             color: Appcolors.primaryText,
             fontSize: 19,
             fontWeight: FontWeight.bold,
@@ -41,60 +102,66 @@ class MedicalRecordDetailScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
         child: isDiagnosis
             ? _buildDiagnosisDetails()
-            : _buildVitalsDetails(),
+            : isVital
+                ? _buildVitalsDetails()
+                : _buildGenericDetails(),
       ),
     );
   }
 
+  // ============================================================
+  // DIAGNOSIS
+  // ============================================================
+
   Widget _buildDiagnosisDetails() {
+    final diagnosisName = _value(data['diagnosisName']);
+    final status = _value(data['status']);
+    final severity = _value(data['severity']);
+    final diagnosisCode = _value(data['diagnosisCode']);
+    final diagnosisType = _value(data['diagnosisType']);
+    final notes = _value(data['notes']);
+    final diagnosedAt = _formatDate(data['diagnosedAt']);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildHeader(
           icon: Icons.medical_services_outlined,
-          title: 'Viral Fever',
+          title: diagnosisName,
           subtitle: 'Diagnosis',
-          status: 'Active',
+          status: status,
         ),
 
         const SizedBox(height: 24),
 
         _buildSectionTitle('Diagnosis'),
-
         const SizedBox(height: 12),
 
         _buildInfoCard(
           children: [
             _buildInfoRow(
               label: 'Condition',
-              value: 'Viral Fever',
+              value: diagnosisName,
             ),
             _buildInfoRow(
               label: 'Status',
-              value: 'Active',
+              value: status,
+            ),
+            _buildInfoRow(
+              label: 'Severity',
+              value: severity,
+            ),
+            _buildInfoRow(
+              label: 'Diagnosis type',
+              value: diagnosisType,
+            ),
+            _buildInfoRow(
+              label: 'Diagnosis code',
+              value: diagnosisCode,
             ),
             _buildInfoRow(
               label: 'Diagnosed',
-              value: '18 September 2026',
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 24),
-
-        _buildSectionTitle('Healthcare Provider'),
-
-        const SizedBox(height: 12),
-
-        _buildInfoCard(
-          children: [
-            _buildInfoRow(
-              label: 'Doctor',
-              value: 'Dr. John Doe',
-            ),
-            _buildInfoRow(
-              label: 'Hospital',
-              value: 'Shillong Civil Hospital',
+              value: diagnosedAt,
             ),
           ],
         ),
@@ -102,14 +169,15 @@ class MedicalRecordDetailScreen extends StatelessWidget {
         const SizedBox(height: 24),
 
         _buildSectionTitle('Medical Notes'),
-
         const SizedBox(height: 12),
 
         _buildInfoCard(
           children: [
             Text(
-              'No additional medical notes available.',
-              style: TextStyle(
+              notes == 'Not available'
+                  ? 'No additional medical notes available.'
+                  : notes,
+              style: const TextStyle(
                 fontSize: 14,
                 color: Appcolors.secondaryText,
                 height: 1.5,
@@ -117,58 +185,107 @@ class MedicalRecordDetailScreen extends StatelessWidget {
             ),
           ],
         ),
-
-        const SizedBox(height: 24),
-
-        _buildSectionTitle('Follow-up'),
-
-        const SizedBox(height: 12),
-
-        _buildInfoCard(
-          children: [
-            _buildInfoRow(
-              label: 'Follow-up date',
-              value: 'Not specified',
-            ),
-          ],
-        ),
       ],
     );
   }
 
+  // ============================================================
+  // VITALS
+  // ============================================================
+
   Widget _buildVitalsDetails() {
+    final systolic = data['bloodPressureSystolic'];
+    final diastolic = data['bloodPressureDiastolic'];
+
+    String bloodPressure = 'Not available';
+
+    if (systolic != null && diastolic != null) {
+      bloodPressure = '$systolic/$diastolic mmHg';
+    }
+
+    final heartRate = data['heartRate'] != null
+        ? '${data['heartRate']} bpm'
+        : 'Not available';
+
+    final oxygenSaturation = data['oxygenSaturation'] != null
+        ? '${data['oxygenSaturation']}%'
+        : 'Not available';
+
+    final temperature = data['temperature'] != null
+        ? '${data['temperature']} °C'
+        : 'Not available';
+
+    final respiratoryRate = data['respiratoryRate'] != null
+        ? '${data['respiratoryRate']} breaths/min'
+        : 'Not available';
+
+    final weight = data['weight'] != null
+        ? '${data['weight']} kg'
+        : 'Not available';
+
+    final height = data['height'] != null
+        ? '${data['height']} cm'
+        : 'Not available';
+
+    final bmi = _value(data['bmi']);
+
+    final glucose = data['glucose'] != null
+        ? '${data['glucose']}'
+        : 'Not available';
+
+    final recordedAt = _formatDate(data['recordedAt']);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildHeader(
           icon: Icons.favorite_outline,
-          title: 'Vitals',
+          title: 'Vital Signs',
           subtitle: 'Recorded measurements',
         ),
 
         const SizedBox(height: 24),
 
         _buildSectionTitle('Measurements'),
-
         const SizedBox(height: 12),
 
         _buildInfoCard(
           children: [
             _buildInfoRow(
               label: 'Blood Pressure',
-              value: '120/80 mmHg',
+              value: bloodPressure,
             ),
             _buildInfoRow(
               label: 'Heart Rate',
-              value: '78 bpm',
+              value: heartRate,
             ),
             _buildInfoRow(
               label: 'SpO₂',
-              value: '98%',
+              value: oxygenSaturation,
             ),
             _buildInfoRow(
               label: 'Temperature',
-              value: '36.7 °C',
+              value: temperature,
+            ),
+            _buildInfoRow(
+              label: 'Respiratory Rate',
+              value: respiratoryRate,
+            ),
+            _buildInfoRow(
+              label: 'Weight',
+              value: weight,
+            ),
+            _buildInfoRow(
+              label: 'Height',
+              value: height,
+            ),
+            _buildInfoRow(
+              label: 'BMI',
+              value: bmi,
+            ),
+            _buildInfoRow(
+              label: 'Glucose',
+              value: glucose,
             ),
           ],
         ),
@@ -176,39 +293,74 @@ class MedicalRecordDetailScreen extends StatelessWidget {
         const SizedBox(height: 24),
 
         _buildSectionTitle('Recorded'),
-
         const SizedBox(height: 12),
 
         _buildInfoCard(
           children: [
             _buildInfoRow(
               label: 'Date',
-              value: '18 September 2026',
+              value: recordedAt,
             ),
           ],
+        ),
+
+        if (data['notes'] != null) ...[
+          const SizedBox(height: 24),
+
+          _buildSectionTitle('Notes'),
+          const SizedBox(height: 12),
+
+          _buildInfoCard(
+            children: [
+              Text(
+                data['notes'].toString(),
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Appcolors.secondaryText,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ============================================================
+  // GENERIC RECORD
+  // ============================================================
+
+  Widget _buildGenericDetails() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildHeader(
+          icon: Icons.description_outlined,
+          title: 'Medical Record',
+          subtitle: type,
         ),
 
         const SizedBox(height: 24),
 
-        _buildSectionTitle('Healthcare Provider'),
-
+        _buildSectionTitle('Record Details'),
         const SizedBox(height: 12),
 
         _buildInfoCard(
-          children: [
-            _buildInfoRow(
-              label: 'Recorded by',
-              value: 'Dr. John Doe',
-            ),
-            _buildInfoRow(
-              label: 'Hospital',
-              value: 'Shillong Civil Hospital',
-            ),
-          ],
+          children: data.entries.map((entry) {
+            return _buildInfoRow(
+              label: _formatLabel(entry.key),
+              value: _value(entry.value),
+            );
+          }).toList(),
         ),
       ],
     );
   }
+
+  // ============================================================
+  // HEADER
+  // ============================================================
 
   Widget _buildHeader({
     required IconData icon,
@@ -246,12 +398,13 @@ class MedicalRecordDetailScreen extends StatelessWidget {
 
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: TextStyle(
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.bold,
                     color: Appcolors.primaryText,
@@ -262,7 +415,7 @@ class MedicalRecordDetailScreen extends StatelessWidget {
 
                 Text(
                   subtitle,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     color: Appcolors.secondaryText,
                   ),
@@ -271,20 +424,21 @@ class MedicalRecordDetailScreen extends StatelessWidget {
             ),
           ),
 
-          if (status != null)
+          if (status != null &&
+              status != 'Not available' &&
+              status.isNotEmpty)
             Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: 10,
                 vertical: 6,
               ),
               decoration: BoxDecoration(
-                color:
-                    Appcolors.success.withValues(alpha: 0.1),
+                color: Appcolors.success.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
                 status,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: Appcolors.success,
@@ -296,16 +450,24 @@ class MedicalRecordDetailScreen extends StatelessWidget {
     );
   }
 
+  // ============================================================
+  // SECTION TITLE
+  // ============================================================
+
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: TextStyle(
+      style: const TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.bold,
         color: Appcolors.primaryText,
       ),
     );
   }
+
+  // ============================================================
+  // INFO CARD
+  // ============================================================
 
   Widget _buildInfoCard({
     required List<Widget> children,
@@ -321,12 +483,15 @@ class MedicalRecordDetailScreen extends StatelessWidget {
         ),
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: children,
       ),
     );
   }
+
+  // ============================================================
+  // INFO ROW
+  // ============================================================
 
   Widget _buildInfoRow({
     required String label,
@@ -337,13 +502,12 @@ class MedicalRecordDetailScreen extends StatelessWidget {
         vertical: 8,
       ),
       child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 13,
                 color: Appcolors.secondaryText,
               ),
@@ -356,7 +520,7 @@ class MedicalRecordDetailScreen extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: Appcolors.primaryText,
@@ -366,5 +530,25 @@ class MedicalRecordDetailScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  // ============================================================
+  // FORMAT FIELD NAME
+  // ============================================================
+
+  String _formatLabel(String value) {
+    final result = value
+        .replaceAllMapped(
+          RegExp(r'([A-Z])'),
+          (match) => ' ${match.group(1)}',
+        )
+        .replaceAll('_', ' ')
+        .trim();
+
+    if (result.isEmpty) {
+      return value;
+    }
+
+    return result[0].toUpperCase() + result.substring(1);
   }
 }

@@ -193,7 +193,7 @@ class MedicalTimelineScreen extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (context) =>
                           const MedicalRecordDetailScreen(
-                        type: 'diagnosis',
+                        type: 'diagnosis', record: {},
                       ),
                     ),
                   );
@@ -203,7 +203,7 @@ class MedicalTimelineScreen extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (context) =>
                           const MedicalRecordDetailScreen(
-                        type: 'vitals',
+                        type: 'vitals', record: {},
                       ),
                     ),
                   );

@@ -23,4 +23,20 @@ class ApiService {
 
     return response;
   }
+
+  Future<http.Response> get(
+    String endpoint, {
+    String? token,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl$endpoint'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+
+    return response;
+  }
 }

@@ -45,6 +45,44 @@ class AuthService {
     );
   }
 
+  Future<Map<String, dynamic>> register({
+    required String email,
+    required String username,
+    required String password,
+    required String firstName,
+    required String lastName,
+    String? phone,
+    Map<String, dynamic>? identity,
+  }) async {
+    final response = await _apiService.post(
+      '/auth/register',
+      body: {
+        'email': email,
+        'username': username,
+        'password': password,
+        'firstName': firstName,
+        'lastName': lastName,
+        if (phone != null && phone.isNotEmpty) 'phone': phone,
+        'role': 'PATIENT',
+        'createPatientIdentity': true,
+        if (identity != null) 'identity': identity,
+      },
+    );
+
+    print('REGISTER STATUS: ${response.statusCode}');
+    print('REGISTER RESPONSE: ${response.body}');
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return Map<String, dynamic>.from(data);
+    }
+
+    throw Exception(
+      data['error']?['message'] ?? 'Registration failed',
+    );
+  }
+
   Future<void> logout() async {
     final token = await _authStorage.getAccessToken();
 

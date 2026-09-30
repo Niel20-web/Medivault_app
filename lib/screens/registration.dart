@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
 import '../utils/appcolors.dart';
 
 // ---------------------------------------------------------
@@ -14,6 +15,9 @@ class RegistrationPage extends StatefulWidget {
 }
 
 class _RegistrationPageState extends State<RegistrationPage> {
+  // Auth service
+  final AuthService _authService = AuthService();
+
   // Controllers
   final fullNameController = TextEditingController();
   final emailController = TextEditingController();
@@ -35,6 +39,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final PageController pageController = PageController();
 
   int currentStep = 0;
+
+  // Registration loading state
+  bool isRegistering = false;
+
+  // Password visibility
+  bool obscurePassword = true;
+  bool obscureConfirmPassword = true;
 
   // Blood group
   String? selectedBloodGroup;
@@ -73,6 +84,247 @@ class _RegistrationPageState extends State<RegistrationPage> {
   }
 
   // ---------------------------------------------------------
+  // GENERATE USERNAME
+  // ---------------------------------------------------------
+
+  String generateUsername() {
+    final email = emailController.text.trim();
+
+    if (email.contains('@')) {
+      return email.split('@').first;
+    }
+
+    return email;
+  }
+
+  // ---------------------------------------------------------
+  // SPLIT FULL NAME
+  // ---------------------------------------------------------
+
+  List<String> splitFullName() {
+    final fullName = fullNameController.text.trim();
+
+    final parts = fullName.split(RegExp(r'\s+'));
+
+    if (parts.length < 2) {
+      return [fullName, ''];
+    }
+
+    final firstName = parts.first;
+    final lastName = parts.sublist(1).join(' ');
+
+    return [firstName, lastName];
+  }
+
+  // ---------------------------------------------------------
+  // SHOW MESSAGE
+  // ---------------------------------------------------------
+
+  void showMessage(
+    String message, {
+    bool isError = true,
+  }) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor:
+            isError ? Appcolors.error : Appcolors.success,
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------
+  // REGISTER ACCOUNT
+  // ---------------------------------------------------------
+
+  Future<void> registerAccount() async {
+    // -----------------------------
+    // BASIC VALIDATION
+    // -----------------------------
+
+    if (fullNameController.text.trim().isEmpty) {
+      showMessage('Please enter your full name.');
+      return;
+    }
+
+    final nameParts = splitFullName();
+
+    // Backend requires both firstName and lastName
+    if (nameParts[0].trim().isEmpty ||
+        nameParts[1].trim().isEmpty) {
+      showMessage(
+        'Please enter your first and last name.',
+      );
+      return;
+    }
+
+    if (emailController.text.trim().isEmpty) {
+      showMessage('Please enter your email address.');
+      return;
+    }
+
+    if (passwordController.text.isEmpty) {
+      showMessage('Please enter a password.');
+      return;
+    }
+
+    if (passwordController.text.length < 8) {
+      showMessage(
+        'Password must be at least 8 characters.',
+      );
+      return;
+    }
+
+    if (confirmPasswordController.text.isEmpty) {
+      showMessage('Please confirm your password.');
+      return;
+    }
+
+    if (passwordController.text !=
+        confirmPasswordController.text) {
+      showMessage('Passwords do not match.');
+      return;
+    }
+
+    // -----------------------------
+    // PERSONAL INFORMATION
+    // -----------------------------
+
+    if (dateOfBirth == null) {
+      showMessage('Please select your date of birth.');
+      return;
+    }
+
+    if (selectedBloodGroup == null) {
+      showMessage('Please select your blood group.');
+      return;
+    }
+
+    // -----------------------------
+    // ADDRESS
+    // -----------------------------
+
+    if (houseController.text.trim().isEmpty) {
+      showMessage('Please enter your house number.');
+      return;
+    }
+
+    if (townController.text.trim().isEmpty) {
+      showMessage('Please enter your town or locality.');
+      return;
+    }
+
+    if (cityController.text.trim().isEmpty) {
+      showMessage('Please enter your city.');
+      return;
+    }
+
+    if (stateController.text.trim().isEmpty) {
+      showMessage('Please enter your state.');
+      return;
+    }
+
+    if (pinController.text.trim().isEmpty) {
+      showMessage('Please enter your PIN code.');
+      return;
+    }
+
+    // -----------------------------
+    // EMERGENCY CONTACT
+    // -----------------------------
+
+    if (contactNameController.text.trim().isEmpty) {
+      showMessage('Please enter the emergency contact name.');
+      return;
+    }
+
+    if (contactNumberController.text.trim().isEmpty) {
+      showMessage(
+        'Please enter the emergency contact number.',
+      );
+      return;
+    }
+
+    // -----------------------------
+    // START REGISTRATION
+    // -----------------------------
+
+    setState(() {
+      isRegistering = true;
+    });
+
+    try {
+      await _authService.register(
+        email: emailController.text.trim(),
+        username: generateUsername(),
+        password: passwordController.text,
+        firstName: nameParts[0].trim(),
+        lastName: nameParts[1].trim(),
+        phone: phoneController.text.trim(),
+
+        identity: {
+          'dateOfBirth':
+              dateOfBirth!.toIso8601String(),
+
+          'bloodGroup':
+              selectedBloodGroup,
+
+          // Backend does NOT support line2.
+          // Town/locality is included in line1.
+          'address': {
+            'line1':
+                '${houseController.text.trim()}, '
+                '${townController.text.trim()}',
+            'city': cityController.text.trim(),
+            'state': stateController.text.trim(),
+            'postalCode': pinController.text.trim(),
+            'country': 'India',
+          },
+
+          'emergencyContact': {
+            'name':
+                contactNameController.text.trim(),
+            'relationship': 'Emergency Contact',
+            'phone':
+                contactNumberController.text.trim(),
+          },
+        },
+      );
+
+      if (!mounted) return;
+
+      showMessage(
+        'Account created successfully! Please log in.',
+        isError: false,
+      );
+
+      // Give the SnackBar a moment to appear
+      await Future.delayed(
+        const Duration(milliseconds: 500),
+      );
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+
+      showMessage(
+        e.toString().replaceFirst(
+              'Exception: ',
+              '',
+            ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isRegistering = false;
+        });
+      }
+    }
+  }
+
+  // ---------------------------------------------------------
   // NEXT PAGE
   // ---------------------------------------------------------
 
@@ -87,11 +339,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
         curve: Curves.easeInOut,
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Registration Successful!'),
-        ),
-      );
+      registerAccount();
     }
   }
 
@@ -122,6 +370,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
     required TextEditingController controller,
     TextInputType keyboardType = TextInputType.text,
     bool obscureText = false,
+    VoidCallback? onVisibilityToggle,
   }) {
     return TextFormField(
       controller: controller,
@@ -130,6 +379,18 @@ class _RegistrationPageState extends State<RegistrationPage> {
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
+
+        suffixIcon: onVisibilityToggle != null
+            ? IconButton(
+                onPressed: onVisibilityToggle,
+                icon: Icon(
+                  obscureText
+                      ? Icons.visibility_off
+                      : Icons.visibility,
+                ),
+              )
+            : null,
+
         filled: true,
         fillColor: Appcolors.background,
         border: OutlineInputBorder(
@@ -230,7 +491,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
           Expanded(
             child: PageView(
               controller: pageController,
-              physics: const NeverScrollableScrollPhysics(),
+              physics:
+                  const NeverScrollableScrollPhysics(),
               children: [
                 accountPage(),
                 personalPage(),
@@ -257,7 +519,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
         CircleAvatar(
           radius: 18,
           backgroundColor:
-              active ? Appcolors.primary : Appcolors.surface,
+              active
+                  ? Appcolors.primary
+                  : Appcolors.surface,
           child: Text(
             number,
             style: TextStyle(
@@ -273,8 +537,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
           title,
           style: TextStyle(
             fontSize: 12,
-            fontWeight:
-                active ? FontWeight.bold : FontWeight.normal,
+            fontWeight: active
+                ? FontWeight.bold
+                : FontWeight.normal,
           ),
         ),
       ],
@@ -289,7 +554,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           const Text(
             'Step 1',
@@ -334,7 +600,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
             label: 'Email Address',
             icon: Icons.email,
             controller: emailController,
-            keyboardType: TextInputType.emailAddress,
+            keyboardType:
+                TextInputType.emailAddress,
           ),
 
           const SizedBox(height: 16),
@@ -352,7 +619,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
             label: 'Password',
             icon: Icons.lock,
             controller: passwordController,
-            obscureText: true,
+            obscureText: obscurePassword,
+            onVisibilityToggle: () {
+              setState(() {
+                obscurePassword =
+                    !obscurePassword;
+              });
+            },
           ),
 
           const SizedBox(height: 16),
@@ -360,8 +633,16 @@ class _RegistrationPageState extends State<RegistrationPage> {
           inputField(
             label: 'Confirm Password',
             icon: Icons.lock_outline,
-            controller: confirmPasswordController,
-            obscureText: true,
+            controller:
+                confirmPasswordController,
+            obscureText:
+                obscureConfirmPassword,
+            onVisibilityToggle: () {
+              setState(() {
+                obscureConfirmPassword =
+                    !obscureConfirmPassword;
+              });
+            },
           ),
 
           const SizedBox(height: 30),
@@ -370,19 +651,26 @@ class _RegistrationPageState extends State<RegistrationPage> {
             width: double.infinity,
             height: 55,
             child: ElevatedButton(
-              onPressed: nextPage,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Appcolors.primary,
-                foregroundColor: Appcolors.primaryText,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+              onPressed:
+                  isRegistering ? null : nextPage,
+              style:
+                  ElevatedButton.styleFrom(
+                backgroundColor:
+                    Appcolors.primary,
+                foregroundColor:
+                    Appcolors.primaryText,
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(14),
                 ),
               ),
               child: const Text(
                 'NEXT  →',
                 style: TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  fontWeight:
+                      FontWeight.bold,
                 ),
               ),
             ),
@@ -400,7 +688,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           const Text(
             'Step 2',
@@ -439,13 +728,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
             onTap: selectDate,
             decoration: InputDecoration(
               labelText: 'Date of Birth',
-              prefixIcon: const Icon(
-                Icons.calendar_month,
-              ),
+              prefixIcon:
+                  const Icon(Icons.calendar_month),
               filled: true,
               fillColor: Colors.grey.shade50,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius:
+                    BorderRadius.circular(14),
               ),
             ),
             controller: TextEditingController(
@@ -461,16 +750,18 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
           // BLOOD GROUP
           DropdownButtonFormField<String>(
-           initialValue: selectedBloodGroup,
+            initialValue:
+                selectedBloodGroup,
             decoration: InputDecoration(
               labelText: 'Blood Group',
-              prefixIcon: const Icon(
-                Icons.bloodtype,
-              ),
+              prefixIcon:
+                  const Icon(Icons.bloodtype),
               filled: true,
-              fillColor: Colors.grey.shade50,
+              fillColor:
+                  Colors.grey.shade50,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius:
+                    BorderRadius.circular(14),
               ),
             ),
             items: bloodGroups.map(
@@ -481,11 +772,14 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 );
               },
             ).toList(),
-            onChanged: (value) {
-              setState(() {
-                selectedBloodGroup = value;
-              });
-            },
+            onChanged: isRegistering
+                ? null
+                : (value) {
+                    setState(() {
+                      selectedBloodGroup =
+                          value;
+                    });
+                  },
           ),
 
           const SizedBox(height: 16),
@@ -526,7 +820,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
             label: 'PIN Code',
             icon: Icons.pin_drop,
             controller: pinController,
-            keyboardType: TextInputType.number,
+            keyboardType:
+                TextInputType.number,
           ),
 
           const SizedBox(height: 30),
@@ -536,14 +831,22 @@ class _RegistrationPageState extends State<RegistrationPage> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: previousPage,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(
+                  onPressed:
+                      isRegistering
+                          ? null
+                          : previousPage,
+                  style:
+                      OutlinedButton.styleFrom(
+                    minimumSize:
+                        const Size(
                       double.infinity,
                       55,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                              14),
                     ),
                   ),
                   child: const Text(
@@ -556,16 +859,26 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
               Expanded(
                 child: ElevatedButton(
-                  onPressed: nextPage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Appcolors.primary,
-                    foregroundColor: Appcolors.primaryText,
-                    minimumSize: const Size(
+                  onPressed:
+                      isRegistering
+                          ? null
+                          : nextPage,
+                  style:
+                      ElevatedButton.styleFrom(
+                    backgroundColor:
+                        Appcolors.primary,
+                    foregroundColor:
+                        Appcolors.primaryText,
+                    minimumSize:
+                        const Size(
                       double.infinity,
                       55,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                              14),
                     ),
                   ),
                   child: const Text(
@@ -590,7 +903,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           const Text(
             'Step 3',
@@ -626,7 +940,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
           inputField(
             label: 'Contact Name',
             icon: Icons.person_outline,
-            controller: contactNameController,
+            controller:
+                contactNameController,
           ),
 
           const SizedBox(height: 16),
@@ -634,8 +949,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
           inputField(
             label: 'Contact Number',
             icon: Icons.phone,
-            controller: contactNumberController,
-            keyboardType: TextInputType.phone,
+            controller:
+                contactNumberController,
+            keyboardType:
+                TextInputType.phone,
           ),
 
           const SizedBox(height: 16),
@@ -643,18 +960,22 @@ class _RegistrationPageState extends State<RegistrationPage> {
           inputField(
             label: 'Emergency Dial Number',
             icon: Icons.emergency,
-            controller: emergencyDialController,
-            keyboardType: TextInputType.phone,
+            controller:
+                emergencyDialController,
+            keyboardType:
+                TextInputType.phone,
           ),
 
           const SizedBox(height: 12),
 
           // Emergency information box
           Container(
-            padding: const EdgeInsets.all(15),
+            padding:
+                const EdgeInsets.all(15),
             decoration: BoxDecoration(
               color: Appcolors.deepBlue,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius:
+                  BorderRadius.circular(14),
               border: Border.all(
                 color: Appcolors.primary,
               ),
@@ -673,7 +994,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     'Make sure the emergency contact number '
                     'is correct and reachable.',
                     style: TextStyle(
-                      color: Appcolors.warning,
+                      color:
+                          Appcolors.warning,
                       fontSize: 13,
                     ),
                   ),
@@ -689,14 +1011,22 @@ class _RegistrationPageState extends State<RegistrationPage> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: previousPage,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(
+                  onPressed:
+                      isRegistering
+                          ? null
+                          : previousPage,
+                  style:
+                      OutlinedButton.styleFrom(
+                    minimumSize:
+                        const Size(
                       double.infinity,
                       55,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                              14),
                     ),
                   ),
                   child: const Text(
@@ -709,21 +1039,42 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
               Expanded(
                 child: ElevatedButton(
-                  onPressed: nextPage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Appcolors.primary,
-                    foregroundColor: Appcolors.primaryText,
-                    minimumSize: const Size(
+                  onPressed:
+                      isRegistering
+                          ? null
+                          : nextPage,
+                  style:
+                      ElevatedButton.styleFrom(
+                    backgroundColor:
+                        Appcolors.primary,
+                    foregroundColor:
+                        Appcolors.primaryText,
+                    minimumSize:
+                        const Size(
                       double.infinity,
                       55,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                              14),
                     ),
                   ),
-                  child: const Text(
-                    'REGISTER',
-                  ),
+                  child: isRegistering
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child:
+                              CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color:
+                                Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          'REGISTER',
+                        ),
                 ),
               ),
             ],
@@ -746,14 +1097,17 @@ class _RegistrationPageState extends State<RegistrationPage> {
     phoneController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
+
     houseController.dispose();
     townController.dispose();
     cityController.dispose();
     stateController.dispose();
     pinController.dispose();
+
     contactNameController.dispose();
     contactNumberController.dispose();
     emergencyDialController.dispose();
+
     pageController.dispose();
 
     super.dispose();
