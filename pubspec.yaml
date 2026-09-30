@@ -28,9 +28,9 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/images/medivault_logo.png
+    - assets/images/medivault_logo_cropped.png
 
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/medivault_logo.png"
+  image_path: "assets/images/medivault_logo_cropped.png"

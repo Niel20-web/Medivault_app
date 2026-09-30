@@ -98,7 +98,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                   end: 1.0,
                 ).animate(_iconAnimation),
                 child: Image.asset(
-                  'assets/images/medivault_logo.png',
+                  'assets/images/medivault_logo_cropped.png',
                   width: 120,
                   height: 120,
                 ),

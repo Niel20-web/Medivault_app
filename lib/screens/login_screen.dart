@@ -93,7 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 children: [
                   Image.asset(
-                    'assets/images/medivault_logo.png',
+                    'assets/images/medivault_logo_cropped.png',
                     width: 90,
                     height: 90,
                   ),

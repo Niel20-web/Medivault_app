@@ -81,7 +81,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Update HomeContent whenever patient data changes.
     _pages[0] = HomeContent(
       onNavigate: _onItemTapped,
       patient: _patient,
@@ -96,18 +95,41 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         backgroundColor: Appcolors.background,
         elevation: 0,
-
-        // Prevents the back arrow from appearing
         automaticallyImplyLeading: false,
-
         centerTitle: false,
-        title: const Text(
-          'MediVault',
-          style: TextStyle(
-            color: Appcolors.primaryText,
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
+
+        title: Row(
+          children: [
+            // MediVault logo
+            Container(
+              width: 50,
+              height: 50,
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Appcolors.background,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Transform.scale(
+                scale: 1.15,
+                child: Image.asset(
+                  'assets/images/medivault_logo_cropped.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+
+            const SizedBox(width: 10),
+
+            const Text(
+              'MediVault',
+              style: TextStyle(
+                color: Appcolors.primaryText,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.4,
+              ),
+            ),
+          ],
         ),
       ),
 
