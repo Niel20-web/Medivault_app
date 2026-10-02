@@ -492,6 +492,29 @@ class _RegistrationPageState
             ),
           ),
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          
+
           const SizedBox(height: 5),
 
           const Text(
@@ -832,8 +855,41 @@ class _RegistrationPageState
 
               Expanded(
                 child: ElevatedButton(
-                  onPressed: nextPage,
+                   onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProfilePage(
+                            fullName: fullNameController.text,
+                            email: emailController.text,
+                            phone: phoneController.text,
 
+                            dateOfBirth: dateOfBirth == null
+                            ? ''
+                            : '${dateOfBirth!.day}/'
+                           '${dateOfBirth!.month}/'
+                           '${dateOfBirth!.year}',
+
+                           bloodGroup: selectedBloodGroup ?? '',
+
+                           houseNo: houseController.text,
+                           town: townController.text,
+                           city: cityController.text,
+                           state: stateController.text,
+                            pinCode: pinController.text,
+
+                           contactName: contactNameController.text,
+                           contactNumber: contactNumberController.text,
+                           emergencyNumber: emergencyDialController.text,
+                          ),
+                         ),
+                       );
+                     },
+
+  child: const Text(
+    'REGISTER',
+  ),
+),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Appcolors.primary,
                     foregroundColor: Appcolors.primaryText,
