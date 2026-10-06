@@ -39,4 +39,21 @@ class ApiService {
 
     return response;
   }
+  Future<http.Response> patch(
+  String endpoint, {
+  Map<String, dynamic>? body,
+  String? token,
+}) async {
+  final response = await http.patch(
+    Uri.parse('$baseUrl$endpoint'),
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    },
+    body: body != null ? jsonEncode(body) : null,
+  );
+
+  return response;
+}
 }

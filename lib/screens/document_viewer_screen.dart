@@ -1,0 +1,852 @@
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import '../services/medical_record_service.dart';
+import '../services/patient_service.dart';
+import '../utils/appcolors.dart';
+import '../utils/auth_storage.dart';
+
+class DocumentViewerScreen extends StatefulWidget {
+  final Map<String, dynamic> document;
+
+  const DocumentViewerScreen({
+    super.key,
+    required this.document,
+  });
+
+  @override
+  State<DocumentViewerScreen> createState() =>
+      _DocumentViewerScreenState();
+}
+
+class _DocumentViewerScreenState
+    extends State<DocumentViewerScreen> {
+  final PatientService _patientService =
+      PatientService();
+
+  final MedicalRecordService _medicalRecordService =
+      MedicalRecordService();
+
+  final AuthStorage _authStorage =
+      AuthStorage();
+
+  String? _error;
+
+  Uint8List? _documentBytes;
+
+  Map<String, dynamic>? _metadata;
+
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDocument();
+  }
+
+  Future<void> _loadDocument() async {
+    try {
+      print(
+        '========== DOCUMENT VIEW START ==========',
+      );
+
+      // -----------------------------------------------------------------------
+      // DOCUMENT ID
+      // -----------------------------------------------------------------------
+
+      final documentId =
+          widget.document['documentId'] ??
+          widget.document['_id'] ??
+          widget.document['id'];
+
+      print('DOCUMENT ID: $documentId');
+
+      if (documentId == null ||
+          documentId.toString().isEmpty) {
+        throw Exception(
+          'Document ID was not returned by the server.',
+        );
+      }
+
+      // -----------------------------------------------------------------------
+      // PATIENT
+      // -----------------------------------------------------------------------
+
+      final patientResponse =
+          await _patientService
+              .getMyPatientProfile();
+
+      final patientData =
+          patientResponse['data'];
+
+      if (patientData == null) {
+        throw Exception(
+          'Patient data was not returned by the server.',
+        );
+      }
+
+      final patientId =
+          patientData['_id'];
+
+      print('PATIENT ID: $patientId');
+
+      if (patientId == null ||
+          patientId.toString().isEmpty) {
+        throw Exception(
+          'Patient UUID was not returned by the server.',
+        );
+      }
+
+      final patientIdString =
+          patientId.toString();
+
+      final documentIdString =
+          documentId.toString();
+
+      // -----------------------------------------------------------------------
+      // GET DOCUMENT METADATA
+      // -----------------------------------------------------------------------
+
+      print(
+        'GETTING DOCUMENT METADATA...',
+      );
+
+      final metadataResponse =
+          await _medicalRecordService
+              .getDocumentMetadata(
+        patientId: patientIdString,
+        documentId: documentIdString,
+      );
+
+      Map<String, dynamic> metadata;
+
+      final metadataData =
+          metadataResponse['data'];
+
+      if (metadataData is Map) {
+        metadata =
+            Map<String, dynamic>.from(
+          metadataData,
+        );
+      } else {
+        metadata =
+            Map<String, dynamic>.from(
+          metadataResponse,
+        );
+      }
+
+      print(
+        'DOCUMENT METADATA: $metadata',
+      );
+
+      // -----------------------------------------------------------------------
+      // GET TEMPORARY DOCUMENT URL
+      // -----------------------------------------------------------------------
+
+      print(
+        'GETTING DOCUMENT DOWNLOAD URL...',
+      );
+
+      final url =
+          await _medicalRecordService
+              .getDocumentUrl(
+        patientId: patientIdString,
+        documentId: documentIdString,
+      );
+
+      print(
+        'DOCUMENT VIEW URL: $url',
+      );
+
+      if (url.isEmpty) {
+        throw Exception(
+          'The server returned an empty document URL.',
+        );
+      }
+
+      // -----------------------------------------------------------------------
+      // ACCESS TOKEN
+      // -----------------------------------------------------------------------
+
+      final token =
+          await _authStorage
+              .getAccessToken();
+
+      if (token == null ||
+          token.isEmpty) {
+        throw Exception(
+          'No access token found.',
+        );
+      }
+
+      print(
+        'ACCESS TOKEN FOUND: true',
+      );
+
+      // -----------------------------------------------------------------------
+      // DOWNLOAD DOCUMENT
+      // -----------------------------------------------------------------------
+
+      print(
+        'DOWNLOADING DOCUMENT...',
+      );
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Accept': 'image/*',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      print(
+        'DOCUMENT DOWNLOAD STATUS: '
+        '${response.statusCode}',
+      );
+
+      print(
+        'DOCUMENT CONTENT TYPE: '
+        '${response.headers['content-type']}',
+      );
+
+      print(
+        'DOCUMENT SIZE: '
+        '${response.bodyBytes.length} bytes',
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception(
+          'Document download failed '
+          '(HTTP ${response.statusCode}).',
+        );
+      }
+
+      if (response.bodyBytes.isEmpty) {
+        throw Exception(
+          'The server returned an empty document.',
+        );
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _metadata = metadata;
+        _documentBytes = response.bodyBytes;
+        _isLoading = false;
+        _error = null;
+      });
+
+      print(
+        'DOCUMENT DOWNLOADED SUCCESSFULLY',
+      );
+
+      print(
+        '========================================',
+      );
+    } catch (e, stackTrace) {
+      print(
+        '========== DOCUMENT VIEW ERROR ==========',
+      );
+
+      print('ERROR: $e');
+
+      print(
+        'STACK TRACE: $stackTrace',
+      );
+
+      print(
+        '========================================',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  String _stringValue(
+    dynamic value,
+  ) {
+    if (value == null) {
+      return '';
+    }
+
+    final valueString =
+        value.toString().trim();
+
+    if (valueString.isEmpty ||
+        valueString == 'null') {
+      return '';
+    }
+
+    return valueString;
+  }
+
+  String _formatDate(
+    dynamic value,
+  ) {
+    final valueString =
+        _stringValue(value);
+
+    if (valueString.isEmpty) {
+      return '';
+    }
+
+    try {
+      final date =
+          DateTime.parse(valueString);
+
+      final localDate =
+          date.toLocal();
+
+      final day =
+          localDate.day
+              .toString()
+              .padLeft(2, '0');
+
+      final month =
+          localDate.month
+              .toString()
+              .padLeft(2, '0');
+
+      final year =
+          localDate.year.toString();
+
+      return '$day/$month/$year';
+    } catch (_) {
+      return valueString;
+    }
+  }
+
+  String _formatFileSize(
+    dynamic value,
+  ) {
+    if (value == null) {
+      return '';
+    }
+
+    final bytes =
+        int.tryParse(
+      value.toString(),
+    );
+
+    if (bytes == null) {
+      return '';
+    }
+
+    if (bytes < 1024) {
+      return '$bytes B';
+    }
+
+    if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fileName =
+        _stringValue(
+          _metadata?['originalName'],
+        ).isNotEmpty
+            ? _stringValue(
+                _metadata?['originalName'],
+              )
+            : _stringValue(
+                widget.document['originalName'],
+              ).isNotEmpty
+                ? _stringValue(
+                    widget.document[
+                      'originalName'
+                    ],
+                  )
+                : 'Medical Document';
+
+    return Scaffold(
+      backgroundColor:
+          Appcolors.background,
+
+      appBar: AppBar(
+        backgroundColor:
+            Appcolors.background,
+        elevation: 0,
+
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back,
+            color:
+                Appcolors.primaryText,
+          ),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+        ),
+
+        title: const Text(
+          'Medical Document',
+          style: TextStyle(
+            color:
+                Appcolors.primaryText,
+            fontSize: 19,
+            fontWeight:
+                FontWeight.bold,
+          ),
+        ),
+      ),
+
+      body: _buildBody(fileName),
+    );
+  }
+
+  Widget _buildBody(
+    String fileName,
+  ) {
+    // -------------------------------------------------------------------------
+    // LOADING
+    // -------------------------------------------------------------------------
+
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisSize:
+              MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(
+              color:
+                  Appcolors.primary,
+            ),
+
+            SizedBox(height: 14),
+
+            Text(
+              'Loading document...',
+              style: TextStyle(
+                color:
+                    Appcolors.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // ERROR
+    // -------------------------------------------------------------------------
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding:
+              const EdgeInsets.all(24),
+
+          child: Column(
+            mainAxisSize:
+                MainAxisSize.min,
+
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 48,
+                color:
+                    Appcolors.error,
+              ),
+
+              const SizedBox(
+                height: 14,
+              ),
+
+              const Text(
+                'Unable to open document',
+                textAlign:
+                    TextAlign.center,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight:
+                      FontWeight.bold,
+                  color:
+                      Appcolors.primaryText,
+                ),
+              ),
+
+              const SizedBox(
+                height: 8,
+              ),
+
+              Text(
+                _error!,
+                textAlign:
+                    TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color:
+                      Appcolors.secondaryText,
+                ),
+              ),
+
+              const SizedBox(
+                height: 20,
+              ),
+
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _isLoading = true;
+                    _error = null;
+                    _documentBytes = null;
+                    _metadata = null;
+                  });
+
+                  _loadDocument();
+                },
+
+                icon: const Icon(
+                  Icons.refresh,
+                ),
+
+                label: const Text(
+                  'Try Again',
+                ),
+
+                style:
+                    ElevatedButton.styleFrom(
+                  backgroundColor:
+                      Appcolors.primary,
+                  foregroundColor:
+                      Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // NO DOCUMENT
+    // -------------------------------------------------------------------------
+
+    if (_documentBytes == null) {
+      return const Center(
+        child: Text(
+          'Document is unavailable.',
+          style: TextStyle(
+            color:
+                Appcolors.secondaryText,
+          ),
+        ),
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // METADATA
+    // -------------------------------------------------------------------------
+
+    final uploadedBy =
+        _stringValue(
+      _metadata?['uploadedByName'],
+    );
+
+    final uploadedByRole =
+        _stringValue(
+      _metadata?['uploadedByRole'],
+    );
+
+    final documentType =
+        _stringValue(
+      _metadata?['category'],
+    );
+
+    final documentTitle =
+        _stringValue(
+      _metadata?['documentTitle'],
+    );
+
+    final documentDate =
+        _formatDate(
+      _metadata?['documentDate'],
+    );
+
+    final uploadedDate =
+        _formatDate(
+      _metadata?['createdAt'],
+    );
+
+    final fileSize =
+        _formatFileSize(
+      _metadata?['sizeBytes'],
+    );
+
+    return Column(
+      children: [
+        // ---------------------------------------------------------------------
+        // DOCUMENT INFO
+        // ---------------------------------------------------------------------
+
+        Container(
+          width: double.infinity,
+
+          padding:
+              const EdgeInsets.fromLTRB(
+            20,
+            14,
+            20,
+            14,
+          ),
+
+          color:
+              Appcolors.surface,
+
+          child: Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+
+            children: [
+              Text(
+                fileName,
+                maxLines: 2,
+                overflow:
+                    TextOverflow.ellipsis,
+
+                style:
+                    const TextStyle(
+                  fontSize: 15,
+                  fontWeight:
+                      FontWeight.w700,
+                  color:
+                      Appcolors.primaryText,
+                ),
+              ),
+
+              if (documentTitle
+                  .isNotEmpty) ...[
+                const SizedBox(
+                  height: 4,
+                ),
+
+                Text(
+                  documentTitle,
+                  maxLines: 2,
+                  overflow:
+                      TextOverflow.ellipsis,
+
+                  style:
+                      const TextStyle(
+                    fontSize: 13,
+                    color:
+                        Appcolors.secondaryText,
+                  ),
+                ),
+              ],
+
+              const SizedBox(
+                height: 12,
+              ),
+
+              // Uploaded by
+              if (uploadedBy
+                  .isNotEmpty)
+                _infoRow(
+                  icon:
+                      Icons.person_outline,
+                  label:
+                      'Uploaded by',
+                  value:
+                      uploadedByRole
+                              .isNotEmpty
+                          ? '$uploadedBy • $uploadedByRole'
+                          : uploadedBy,
+                ),
+
+              // Uploaded date
+              if (uploadedDate
+                  .isNotEmpty)
+                _infoRow(
+                  icon:
+                      Icons.upload_outlined,
+                  label:
+                      'Uploaded on',
+                  value:
+                      uploadedDate,
+                ),
+
+              // Document date
+              if (documentDate
+                  .isNotEmpty)
+                _infoRow(
+                  icon:
+                      Icons.calendar_today_outlined,
+                  label:
+                      'Document date',
+                  value:
+                      documentDate,
+                ),
+
+              // Type
+              if (documentType
+                  .isNotEmpty)
+                _infoRow(
+                  icon:
+                      Icons.category_outlined,
+                  label:
+                      'Type',
+                  value:
+                      documentType,
+                ),
+
+              // Size
+              if (fileSize
+                  .isNotEmpty)
+                _infoRow(
+                  icon:
+                      Icons.data_usage_outlined,
+                  label:
+                      'File size',
+                  value:
+                      fileSize,
+                ),
+            ],
+          ),
+        ),
+
+        const Divider(
+          height: 1,
+          color:
+              Appcolors.border,
+        ),
+
+        // ---------------------------------------------------------------------
+        // DOCUMENT VIEWER
+        // ---------------------------------------------------------------------
+
+        Expanded(
+          child: Container(
+            width: double.infinity,
+
+            color:
+                Appcolors.background,
+
+            padding:
+                const EdgeInsets.all(12),
+
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4.0,
+
+              child: Center(
+                child: Image.memory(
+                  _documentBytes!,
+                  fit:
+                      BoxFit.contain,
+
+                  errorBuilder: (
+                    context,
+                    error,
+                    stackTrace,
+                  ) {
+                    print(
+                      'DOCUMENT MEMORY IMAGE ERROR: '
+                      '$error',
+                    );
+
+                    return const Column(
+                      mainAxisSize:
+                          MainAxisSize.min,
+
+                      children: [
+                        Icon(
+                          Icons
+                              .broken_image_outlined,
+                          size: 56,
+                          color:
+                              Appcolors.secondaryText,
+                        ),
+
+                        SizedBox(
+                          height: 12,
+                        ),
+
+                        Text(
+                          'The document could not be displayed.',
+                          style:
+                              TextStyle(
+                            color:
+                                Appcolors.secondaryText,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Padding(
+      padding:
+          const EdgeInsets.only(
+        bottom: 7,
+      ),
+
+      child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+
+        children: [
+          Icon(
+            icon,
+            size: 17,
+            color:
+                Appcolors.secondaryText,
+          ),
+
+          const SizedBox(
+            width: 9,
+          ),
+
+          Text(
+            '$label: ',
+            style:
+                const TextStyle(
+              fontSize: 12,
+              fontWeight:
+                  FontWeight.w600,
+              color:
+                  Appcolors.secondaryText,
+            ),
+          ),
+
+          Expanded(
+            child: Text(
+              value,
+              style:
+                  const TextStyle(
+                fontSize: 12,
+                fontWeight:
+                    FontWeight.w600,
+                color:
+                    Appcolors.primaryText,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

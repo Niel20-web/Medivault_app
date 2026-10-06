@@ -61,6 +61,16 @@ class _RegistrationPageState extends State<RegistrationPage> {
     'O-',
   ];
 
+  // Gender
+  String? selectedGender;
+
+  final List<String> genders = [
+    'Male',
+    'Female',
+    'Non-binary',
+    'Prefer not to say',
+  ];
+
   // Date of birth
   DateTime? dateOfBirth;
 
@@ -195,6 +205,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
       return;
     }
 
+    if (selectedGender == null) {
+      showMessage('Please select your gender.');
+      return;
+    }
+
     if (selectedBloodGroup == null) {
       showMessage('Please select your blood group.');
       return;
@@ -263,11 +278,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
         phone: phoneController.text.trim(),
 
         identity: {
-          'dateOfBirth':
-              dateOfBirth!.toIso8601String(),
+          'dateOfBirth': dateOfBirth!.toIso8601String(),
 
-          'bloodGroup':
-              selectedBloodGroup,
+          'gender': selectedGender,
+
+          'bloodGroup': selectedBloodGroup,
 
           // Backend does NOT support line2.
           // Town/locality is included in line1.
@@ -744,6 +759,39 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       '${dateOfBirth!.month}/'
                       '${dateOfBirth!.year}',
             ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // GENDER
+          DropdownButtonFormField<String>(
+            initialValue: selectedGender,
+            decoration: InputDecoration(
+              labelText: 'Gender',
+              prefixIcon:
+                  const Icon(Icons.person_outline),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+              border: OutlineInputBorder(
+                borderRadius:
+                    BorderRadius.circular(14),
+              ),
+            ),
+            items: genders.map(
+              (gender) {
+                return DropdownMenuItem<String>(
+                  value: gender,
+                  child: Text(gender),
+                );
+              },
+            ).toList(),
+            onChanged: isRegistering
+                ? null
+                : (value) {
+                    setState(() {
+                      selectedGender = value;
+                    });
+                  },
           ),
 
           const SizedBox(height: 16),

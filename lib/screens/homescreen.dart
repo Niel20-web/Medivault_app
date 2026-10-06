@@ -7,6 +7,9 @@ import '../services/patient_service.dart';
 import 'medical_record_screen.dart';
 import 'medical_timeline_screen.dart';
 import 'medical_id_screen.dart';
+import 'prescription.dart';
+import 'profile.dart';
+import 'notifications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -66,41 +69,31 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  late final List<Widget> _pages = [
-    HomeContent(
-      onNavigate: _onItemTapped,
-      patient: _patient,
-      isLoading: _isLoadingPatient,
-      error: _patientError,
-    ),
-    const MedicalRecordsScreen(),
-    const MedicalIdScreen(),
-    const MedicalTimelineScreen(),
-    const PlaceholderScreen(title: 'Profile'),
-  ];
-
   @override
   Widget build(BuildContext context) {
-    _pages[0] = HomeContent(
-      onNavigate: _onItemTapped,
-      patient: _patient,
-      isLoading: _isLoadingPatient,
-      error: _patientError,
-    );
+    final List<Widget> pages = [
+      HomeContent(
+        onNavigate: _onItemTapped,
+        patient: _patient,
+        isLoading: _isLoadingPatient,
+        error: _patientError,
+      ),
+      const MedicalRecordScreen(),
+      const MedicalIdScreen(),
+      const MedicalTimelineScreen(),
+      const ProfilePage(),
+    ];
 
     return Scaffold(
       backgroundColor: Appcolors.background,
 
-      // Fixed header
       appBar: AppBar(
         backgroundColor: Appcolors.background,
         elevation: 0,
         automaticallyImplyLeading: false,
         centerTitle: false,
-
         title: Row(
           children: [
-            // MediVault logo
             Container(
               width: 50,
               height: 50,
@@ -117,9 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-
             const SizedBox(width: 10),
-
             const Text(
               'MediVault',
               style: TextStyle(
@@ -133,13 +124,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
 
-      // Main page
       body: IndexedStack(
         index: _selectedIndex,
-        children: _pages,
+        children: pages,
       ),
 
-      // Fixed bottom navigation
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
@@ -179,12 +168,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ============================================================
-// HOME CONTENT
-// ============================================================
-
 class HomeContent extends StatelessWidget {
-  final ValueChanged<int> onNavigate;
+  final Function(int) onNavigate;
   final Map<String, dynamic>? patient;
   final bool isLoading;
   final String? error;
@@ -197,145 +182,95 @@ class HomeContent extends StatelessWidget {
     required this.error,
   });
 
-  String getGreeting() {
+  String _getGreeting(String firstName) {
     final hour = DateTime.now().hour;
 
-    if (hour < 12) {
-      return 'Good morning';
-    } else if (hour < 17) {
-      return 'Good afternoon';
-    } else if (hour < 21) {
-      return 'Good evening';
+    if (hour >= 5 && hour < 12) {
+      return 'Good morning, $firstName 👋';
+    } else if (hour >= 12 && hour < 17) {
+      return 'Good afternoon, $firstName 👋';
+    } else if (hour >= 17 && hour < 21) {
+      return 'Good evening, $firstName 👋';
     } else {
-      return 'Good night';
+      return 'Good night, $firstName 👋';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final firstName = patient?['firstName'] ?? 'Patient';
-    final lastName = patient?['lastName'] ?? '';
-    final patientName = '$firstName $lastName'.trim();
-    final patientId = patient?['patientId'] ?? 'Unavailable';
+    String firstName = 'there';
+    String fullName = 'Patient';
+    String patientId = 'Loading...';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Greeting
-          Text(
-            isLoading
-                ? '${getGreeting()} 👋'
-                : '${getGreeting()}, $firstName 👋',
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Appcolors.primaryText,
+    if (patient != null) {
+      firstName = patient!['firstName']?.toString() ?? 'there';
+
+      final first = patient!['firstName']?.toString() ?? '';
+      final last = patient!['lastName']?.toString() ?? '';
+
+      fullName = '$first $last'.trim();
+
+      if (fullName.isEmpty) {
+        fullName = 'Patient';
+      }
+
+      patientId = patient!['patientId']?.toString() ??
+          patient!['profileId']?.toString() ??
+          patient!['_id']?.toString() ??
+          'Unknown';
+    }
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _getGreeting(firstName),
+              style: const TextStyle(
+                color: Appcolors.primaryText,
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
 
-          const SizedBox(height: 6),
+            const SizedBox(height: 6),
 
-          const Text(
-            'Your health. Your records. Your control.',
-            style: TextStyle(
-              fontSize: 14,
-              color: Appcolors.secondaryText,
+            const Text(
+              'Your health. Your records. Your control.',
+              style: TextStyle(
+                color: Appcolors.secondaryText,
+                fontSize: 15,
+              ),
             ),
-          ),
 
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-          // ==================================================
-          // PATIENT LOADING
-          // ==================================================
-
-          if (isLoading)
+            // Medical ID Card
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Appcolors.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Appcolors.border,
+                gradient: const LinearGradient(
+                  colors: [
+                    Appcolors.primary,
+                    Appcolors.deepBlue,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-              ),
-              child: const Row(
-                children: [
-                  SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                    ),
-                  ),
-                  SizedBox(width: 14),
-                  Text(
-                    'Loading your medical ID...',
-                    style: TextStyle(
-                      color: Appcolors.secondaryText,
-                      fontSize: 14,
-                    ),
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: [
+                  BoxShadow(
+                    color: Appcolors.primary.withOpacity(0.20),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
                   ),
                 ],
-              ),
-            )
-          else if (error != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Appcolors.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Appcolors.error,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.error_outline,
-                    color: Appcolors.error,
-                    size: 28,
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Unable to load your medical ID',
-                    style: TextStyle(
-                      color: Appcolors.primaryText,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    error!,
-                    style: const TextStyle(
-                      color: Appcolors.secondaryText,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            // ==================================================
-            // MEDICAL ID CARD
-            // ==================================================
-
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Appcolors.primary,
-                borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 children: [
-                  // Patient information
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,39 +280,47 @@ class HomeContent extends StatelessWidget {
                           style: TextStyle(
                             color: Colors.white70,
                             fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 6),
+
+                        const SizedBox(height: 8),
+
                         Text(
-                          patientName,
+                          fullName,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 21,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
+
                         const SizedBox(height: 6),
+
                         Text(
-                          'Patient ID: $patientId',
+                          patientId,
                           style: const TextStyle(
-                            color: Colors.white,
+                            color: Colors.white70,
                             fontSize: 13,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        const Row(
-                          children: [
+
+                        const SizedBox(height: 18),
+
+                        Row(
+                          children: const [
                             Icon(
-                              Icons.lock_outline,
-                              color: Colors.white70,
-                              size: 16,
+                              Icons.verified_outlined,
+                              color: Colors.white,
+                              size: 17,
                             ),
-                            SizedBox(width: 5),
+                            SizedBox(width: 6),
                             Text(
                               'Securely stored',
                               style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
+                                color: Colors.white,
+                                fontSize: 13,
                               ),
                             ),
                           ],
@@ -386,163 +329,159 @@ class HomeContent extends StatelessWidget {
                     ),
                   ),
 
-                  // QR Code
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
+                  const SizedBox(width: 12),
+
+                  if (patient != null && patient!['_id'] != null)
+                    Container(
+                      width: 88,
+                      height: 88,
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: QrImageView(
+                        data: patient!['_id'].toString(),
+                        version: QrVersions.auto,
+                        backgroundColor: Colors.white,
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_2,
+                        color: Colors.white,
+                        size: 55,
+                      ),
                     ),
-                    child: QrImageView(
-                      data: patientId,
-                      version: QrVersions.auto,
-                      size: 105,
-                      padding: EdgeInsets.zero,
-                    ),
-                  ),
                 ],
               ),
             ),
 
-          const SizedBox(height: 28),
+            const SizedBox(height: 28),
 
-          // ==================================================
-          // QUICK ACCESS
-          // ==================================================
-
-          const Text(
-            'Quick Access',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Appcolors.primaryText,
+            const Text(
+              'Quick Access',
+              style: TextStyle(
+                color: Appcolors.primaryText,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
 
-          const SizedBox(height: 14),
+            const SizedBox(height: 14),
 
-          GridView.count(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 0.95,
-            children: [
-              // Medical Records
-              QuickAccessCard(
-                icon: Icons.folder_outlined,
-                title: 'Medical Records',
-                subtitle: 'View your reports',
-                onTap: () {
-                  onNavigate(1);
-                },
-              ),
+            GridView.count(
+              crossAxisCount: 2,
+              crossAxisSpacing: 14,
+              mainAxisSpacing: 14,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 1.35,
+              children: [
+                QuickAccessCard(
+                  icon: Icons.folder_outlined,
+                  title: 'Medical Records',
+                  onTap: () {
+                    onNavigate(1);
+                  },
+                ),
 
-              // Medical Timeline
-              QuickAccessCard(
-                icon: Icons.timeline_outlined,
-                title: 'Medical Timeline',
-                subtitle: 'View your history',
-                onTap: () {
-                  onNavigate(3);
-                },
-              ),
+                QuickAccessCard(
+                  icon: Icons.timeline_outlined,
+                  title: 'Medical Timeline',
+                  onTap: () {
+                    onNavigate(3);
+                  },
+                ),
 
-              // Medical ID
-              QuickAccessCard(
-                icon: Icons.badge_outlined,
-                title: 'Medical ID',
-                subtitle: 'Show your QR',
-                onTap: () {
-                  onNavigate(2);
-                },
-              ),
+                QuickAccessCard(
+                  icon: Icons.badge_outlined,
+                  title: 'Medical ID',
+                  onTap: () {
+                    onNavigate(2);
+                  },
+                ),
 
-              // Prescriptions
-              QuickAccessCard(
-                icon: Icons.medication_outlined,
-                title: 'Prescriptions',
-                subtitle: 'View your medicines',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Prescriptions screen coming soon',
+                // PRESCRIPTIONS
+                QuickAccessCard(
+                  icon: Icons.medication_outlined,
+                  title: 'Prescriptions',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const PrescriptionsPage(),
                       ),
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
 
-              // Access Permissions
-              QuickAccessCard(
-                icon: Icons.security_outlined,
-                title: 'Access Permissions',
-                subtitle: 'Manage access',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Access Permissions coming soon',
+                QuickAccessCard(
+                  icon: Icons.security_outlined,
+                  title: 'Access Permissions',
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Access Permissions coming soon',
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
 
-              // Notifications
               QuickAccessCard(
-                icon: Icons.notifications_none_outlined,
-                title: 'Notifications',
-                subtitle: 'View updates',
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Notifications screen coming soon',
+                  icon: Icons.notifications_none_outlined,
+                  title: 'Notifications',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NotificationsScreen(),
                       ),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ============================================================
-// QUICK ACCESS CARD
-// ============================================================
-
 class QuickAccessCard extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String subtitle;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   const QuickAccessCard({
     super.key,
     required this.icon,
     required this.title,
-    required this.subtitle,
-    this.onTap,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: Appcolors.surface,
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Appcolors.surface,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color: Appcolors.border,
@@ -553,67 +492,31 @@ class QuickAccessCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
-                  color: Appcolors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  color: Appcolors.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(13),
                 ),
                 child: Icon(
                   icon,
                   color: Appcolors.primary,
-                  size: 26,
+                  size: 23,
                 ),
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
 
               Text(
                 title,
                 style: const TextStyle(
                   color: Appcolors.primaryText,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-              const SizedBox(height: 5),
-
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  color: Appcolors.secondaryText,
-                  fontSize: 12,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ============================================================
-// PLACEHOLDER SCREEN
-// ============================================================
-
-class PlaceholderScreen extends StatelessWidget {
-  final String title;
-
-  const PlaceholderScreen({
-    super.key,
-    required this.title,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: Appcolors.primaryText,
         ),
       ),
     );
