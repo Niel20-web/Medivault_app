@@ -8,14 +8,14 @@ class MedicalIdScreen extends StatefulWidget {
   const MedicalIdScreen({super.key});
 
   @override
-  State<MedicalIdScreen> createState() => _MedicalIdScreenState();
+  State<MedicalIdScreen> createState() =>
+      _MedicalIdScreenState();
 }
 
-class _MedicalIdScreenState extends State<MedicalIdScreen> {
-  final PatientService _patientService = PatientService();
-
-  // Keeps the same QR while the app session is alive.
-  static String? _cachedQrPayloadUrl;
+class _MedicalIdScreenState
+    extends State<MedicalIdScreen> {
+  final PatientService _patientService =
+      PatientService();
 
   Map<String, dynamic>? _patient;
 
@@ -32,56 +32,85 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
     _loadPatientProfile();
   }
 
+  // ============================================================
+  // LOAD CURRENT LOGGED-IN PATIENT
+  // ============================================================
+
   Future<void> _loadPatientProfile() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
 
     try {
       final response =
           await _patientService.getMyPatientProfile();
 
-      final patientData = response['data'];
+      print(
+        'MEDICAL ID PROFILE RESPONSE: $response',
+      );
 
-      if (patientData == null) {
-        throw Exception(
-          'Patient profile data not found.',
+      // Backend may return:
+      //
+      // {
+      //   "data": {
+      //      "_id": "...",
+      //      "patientId": "...",
+      //      ...
+      //   }
+      // }
+      //
+      // OR the patient directly.
+      final dynamic rawPatient =
+          response['data'];
+
+      final Map<String, dynamic> patient;
+
+      if (rawPatient is Map) {
+        patient =
+            Map<String, dynamic>.from(
+          rawPatient,
+        );
+      } else {
+        patient =
+            Map<String, dynamic>.from(
+          response,
         );
       }
 
-      final patient =
-          Map<String, dynamic>.from(patientData);
-
-      // Database UUID used by the Medical Profile QR endpoint.
       final patientUuid =
-          patient['_id']?.toString();
+          patient['_id']?.toString().trim();
 
-      if (patientUuid == null || patientUuid.isEmpty) {
+      if (patientUuid == null ||
+          patientUuid.isEmpty) {
         throw Exception(
           'Patient record ID not found.',
         );
       }
 
       print(
-        'MEDICAL ID PATIENT UUID: $patientUuid',
+        'MEDICAL ID CURRENT PATIENT UUID: $patientUuid',
       );
 
       print(
-        'MEDICAL ID PATIENT ID: ${patient['patientId']}',
+        'MEDICAL ID CURRENT PATIENT ID: '
+        '${patient['patientId']}',
       );
 
-      String? payloadUrl = _cachedQrPayloadUrl;
+      print(
+        'MEDICAL ID CURRENT PROFILE ID: '
+        '${patient['profileId']}',
+      );
 
-      // Only generate a new QR if we don't already have one.
-      if (payloadUrl == null || payloadUrl.isEmpty) {
-        payloadUrl =
-            await _generateQr(patientUuid);
-      } else {
-        print(
-          'USING EXISTING MEDICAL QR: $payloadUrl',
-        );
-      }
+      // IMPORTANT:
+      //
+      // Do NOT reuse a QR from another logged-in
+      // patient. The QR belongs to the patient UUID
+      // returned above.
+      final payloadUrl =
+          await _generateQr(patientUuid);
 
       if (!mounted) return;
 
@@ -91,7 +120,9 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('MEDICAL ID ERROR: $e');
+      print(
+        'MEDICAL ID ERROR: $e',
+      );
 
       if (!mounted) return;
 
@@ -107,9 +138,18 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
     }
   }
 
+  // ============================================================
+  // GENERATE QR FOR THIS PATIENT ONLY
+  // ============================================================
+
   Future<String> _generateQr(
     String patientUuid,
   ) async {
+    print(
+      'GENERATING MEDICAL QR FOR PATIENT UUID: '
+      '$patientUuid',
+    );
+
     final qrResponse =
         await _patientService.generateMedicalQr(
       patientUuid,
@@ -119,47 +159,54 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
       'GENERATED QR RESPONSE: $qrResponse',
     );
 
-    // Backend response structure:
-    //
-    // {
-    //   "success": true,
-    //   "data": {
-    //     "payloadUrl": "https://..."
-    //   }
-    // }
-    final qrData = qrResponse['data'];
+    final dynamic rawQrData =
+        qrResponse['data'];
 
-    if (qrData == null) {
+    if (rawQrData == null ||
+        rawQrData is! Map) {
       throw Exception(
         'QR data was not returned.',
       );
     }
 
-    final payloadUrl =
-        qrData['payloadUrl']?.toString();
+    final qrData =
+        Map<String, dynamic>.from(
+      rawQrData,
+    );
 
-    if (payloadUrl == null || payloadUrl.isEmpty) {
+    final payloadUrl =
+        qrData['payloadUrl']
+            ?.toString()
+            .trim();
+
+    if (payloadUrl == null ||
+        payloadUrl.isEmpty) {
       throw Exception(
         'QR verification URL was not generated.',
       );
     }
 
-    // Cache it so we don't regenerate every time
-    // the Medical ID screen is opened.
-    _cachedQrPayloadUrl = payloadUrl;
-
     print(
-      'MEDICAL QR URL: $payloadUrl',
+      'MEDICAL QR FOR $patientUuid: '
+      '$payloadUrl',
     );
 
     return payloadUrl;
   }
 
+  // ============================================================
+  // REGENERATE QR
+  // ============================================================
+
   Future<void> _regenerateQr() async {
-    if (_patient == null) return;
+    if (_patient == null) {
+      return;
+    }
 
     final patientUuid =
-        _patient!['_id']?.toString();
+        _patient!['_id']
+            ?.toString()
+            .trim();
 
     if (patientUuid == null ||
         patientUuid.isEmpty) {
@@ -185,7 +232,9 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
                   false,
                 );
               },
-              child: const Text('Cancel'),
+              child: const Text(
+                'Cancel',
+              ),
             ),
             ElevatedButton(
               onPressed: () {
@@ -194,10 +243,12 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
                   true,
                 );
               },
-              style: ElevatedButton.styleFrom(
+              style:
+                  ElevatedButton.styleFrom(
                 backgroundColor:
                     Appcolors.primary,
-                foregroundColor: Colors.white,
+                foregroundColor:
+                    Colors.white,
               ),
               child: const Text(
                 'Regenerate',
@@ -219,7 +270,9 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
 
     try {
       final payloadUrl =
-          await _generateQr(patientUuid);
+          await _generateQr(
+        patientUuid,
+      );
 
       if (!mounted) return;
 
@@ -228,7 +281,8 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
         _isRegeneratingQr = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         const SnackBar(
           content: Text(
             'Medical ID QR regenerated successfully.',
@@ -246,7 +300,8 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
         _isRegeneratingQr = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             e.toString().replaceFirst(
@@ -259,6 +314,10 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
     }
   }
 
+  // ============================================================
+  // SHOW QR DIALOG
+  // ============================================================
+
   void _showQrDialog() {
     if (_qrPayloadUrl == null ||
         _qrPayloadUrl!.isEmpty) {
@@ -269,7 +328,8 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
       context: context,
       builder: (context) {
         return Dialog(
-          shape: RoundedRectangleBorder(
+          shape:
+              RoundedRectangleBorder(
             borderRadius:
                 BorderRadius.circular(24),
           ),
@@ -322,8 +382,7 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
                     ),
                   ),
                   child: QrImageView(
-                    data:
-                        _qrPayloadUrl!,
+                    data: _qrPayloadUrl!,
                     version:
                         QrVersions.auto,
                     size: 200,
@@ -349,8 +408,7 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
                 const SizedBox(height: 20),
 
                 SizedBox(
-                  width:
-                      double.infinity,
+                  width: double.infinity,
                   child:
                       ElevatedButton(
                     onPressed: () =>
@@ -395,6 +453,10 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
     );
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     final firstName =
@@ -421,8 +483,10 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
 
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        backgroundColor:
+            Colors.white,
+        foregroundColor:
+            Colors.black,
         title: const Text(
           'Medical ID',
           style: TextStyle(
@@ -432,551 +496,466 @@ class _MedicalIdScreenState extends State<MedicalIdScreen> {
         ),
       ),
 
-      body: _isLoading
-          ? const Center(
-              child:
-                  CircularProgressIndicator(
+      body: _buildBody(
+        patientName,
+        patientId,
+      ),
+    );
+  }
+
+  // ============================================================
+  // BODY
+  // ============================================================
+
+  Widget _buildBody(
+    String patientName,
+    String patientId,
+  ) {
+    if (_isLoading) {
+      return const Center(
+        child:
+            CircularProgressIndicator(
+          color: Appcolors.primary,
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding:
+              const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize:
+                MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 52,
                 color:
-                    Appcolors.primary,
+                    Colors.redAccent,
               ),
-            )
-          : _error != null
-              ? Center(
-                  child: Padding(
-                    padding:
-                        const EdgeInsets
-                            .all(24),
-                    child: Column(
-                      mainAxisSize:
-                          MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons
-                              .error_outline,
-                          size: 52,
-                          color:
-                              Colors.redAccent,
-                        ),
 
-                        const SizedBox(
-                          height: 16,
-                        ),
+              const SizedBox(height: 16),
 
-                        Text(
-                          _error!,
-                          textAlign:
-                              TextAlign.center,
-                          style:
-                              const TextStyle(
-                            fontSize: 15,
-                            color:
-                                Colors.black87,
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 20,
-                        ),
-
-                        ElevatedButton(
-                          onPressed:
-                              _loadPatientProfile,
-                          style:
-                              ElevatedButton
-                                  .styleFrom(
-                            backgroundColor:
-                                Appcolors
-                                    .primary,
-                            foregroundColor:
-                                Colors.white,
-                          ),
-                          child:
-                              const Text(
-                            'Retry',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh:
-                      _loadPatientProfile,
+              Text(
+                _error!,
+                textAlign:
+                    TextAlign.center,
+                style:
+                    const TextStyle(
+                  fontSize: 15,
                   color:
+                      Colors.black87,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              ElevatedButton(
+                onPressed:
+                    _loadPatientProfile,
+                style:
+                    ElevatedButton.styleFrom(
+                  backgroundColor:
                       Appcolors.primary,
-                  child:
-                      SingleChildScrollView(
-                    physics:
-                        const AlwaysScrollableScrollPhysics(),
-                    padding:
-                        const EdgeInsets
-                            .all(20),
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment
-                              .start,
-                      children: [
-                        const Text(
-                          'Your Medical ID',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
-                          ),
-                        ),
+                  foregroundColor:
+                      Colors.white,
+                ),
+                child: const Text(
+                  'Retry',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
-                        const SizedBox(
-                          height: 8,
-                        ),
+    return RefreshIndicator(
+      onRefresh:
+          _loadPatientProfile,
+      color:
+          Appcolors.primary,
+      child:
+          SingleChildScrollView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding:
+            const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Your Medical ID',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
 
-                        Text(
-                          'Use your Medical ID QR code to securely share your verified MediVault record.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors
-                                .grey
-                                .shade600,
-                            height: 1.4,
-                          ),
-                        ),
+            const SizedBox(height: 8),
 
-                        const SizedBox(
-                          height: 24,
-                        ),
+            Text(
+              'Use your Medical ID QR code to securely share your verified MediVault record.',
+              style: TextStyle(
+                fontSize: 14,
+                color:
+                    Colors.grey.shade600,
+                height: 1.4,
+              ),
+            ),
 
-                        Container(
-                          width:
-                              double.infinity,
-                          padding:
-                              const EdgeInsets
-                                  .all(20),
-                          decoration:
-                              BoxDecoration(
-                            color:
-                                Colors.white,
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              24,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors
-                                    .black
-                                    .withOpacity(
-                                  0.05,
-                                ),
-                                blurRadius:
-                                    20,
-                                offset:
-                                    const Offset(
-                                  0,
-                                  8,
-                                ),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            children: [
-                              Container(
-                                width: 72,
-                                height: 72,
-                                decoration:
-                                    BoxDecoration(
-                                  color: Appcolors
-                                      .primary
-                                      .withOpacity(
-                                    0.1,
-                                  ),
-                                  shape:
-                                      BoxShape
-                                          .circle,
-                                ),
-                                child:
-                                    const Icon(
-                                  Icons
-                                      .medical_information_outlined,
-                                  color:
-                                      Appcolors
-                                          .primary,
-                                  size: 38,
-                                ),
-                              ),
+            const SizedBox(height: 24),
 
-                              const SizedBox(
-                                height: 16,
-                              ),
+            _buildPatientCard(
+              patientName,
+              patientId,
+            ),
 
-                              Text(
-                                patientName
-                                        .isEmpty
-                                    ? 'MediVault Patient'
-                                    : patientName,
-                                textAlign:
-                                    TextAlign
-                                        .center,
-                                style:
-                                    const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight:
-                                      FontWeight
-                                          .bold,
-                                ),
-                              ),
+            const SizedBox(height: 20),
 
-                              const SizedBox(
-                                height: 6,
-                              ),
+            _buildSecurityCard(),
 
-                              Text(
-                                'Patient ID: $patientId',
-                                textAlign:
-                                    TextAlign
-                                        .center,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors
-                                      .grey
-                                      .shade600,
-                                ),
-                              ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+    );
+  }
 
-                              const SizedBox(
-                                height: 24,
-                              ),
+  // ============================================================
+  // PATIENT CARD
+  // ============================================================
 
-                              Container(
-                                width:
-                                    double.infinity,
-                                padding:
-                                    const EdgeInsets
-                                        .all(18),
-                                decoration:
-                                    BoxDecoration(
-                                  color: Colors
-                                      .grey
-                                      .shade50,
-                                  borderRadius:
-                                      BorderRadius
-                                          .circular(
-                                    18,
-                                  ),
-                                  border:
-                                      Border.all(
-                                    color: Colors
-                                        .grey
-                                        .shade200,
-                                  ),
-                                ),
-                                child:
-                                    Column(
-                                  children: [
-                                    Container(
-                                      padding:
-                                          const EdgeInsets
-                                              .all(
-                                        10,
-                                      ),
-                                      decoration:
-                                          BoxDecoration(
-                                        color:
-                                            Colors
-                                                .white,
-                                        borderRadius:
-                                            BorderRadius
-                                                .circular(
-                                          14,
-                                        ),
-                                      ),
-                                      child:
-                                          QrImageView(
-                                        data:
-                                            _qrPayloadUrl!,
-                                        version:
-                                            QrVersions
-                                                .auto,
-                                        size:
-                                            105,
-                                        padding:
-                                            EdgeInsets
-                                                .zero,
-                                      ),
-                                    ),
+  Widget _buildPatientCard(
+    String patientName,
+    String patientId,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding:
+          const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black
+                .withOpacity(0.05),
+            blurRadius: 20,
+            offset:
+                const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration:
+                BoxDecoration(
+              color: Appcolors.primary
+                  .withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons
+                  .medical_information_outlined,
+              color:
+                  Appcolors.primary,
+              size: 38,
+            ),
+          ),
 
-                                    const SizedBox(
-                                      height: 14,
-                                    ),
+          const SizedBox(height: 16),
 
-                                    Text(
-                                      'Scan to verify',
-                                      style:
-                                          TextStyle(
-                                        fontSize:
-                                            14,
-                                        fontWeight:
-                                            FontWeight
-                                                .w600,
-                                        color: Colors
-                                            .grey
-                                            .shade800,
-                                      ),
-                                    ),
+          Text(
+            patientName.isEmpty
+                ? 'MediVault Patient'
+                : patientName,
+            textAlign:
+                TextAlign.center,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
 
-                                    const SizedBox(
-                                      height: 4,
-                                    ),
+          const SizedBox(height: 6),
 
-                                    Text(
-                                      'Secure MediVault verification',
-                                      style:
-                                          TextStyle(
-                                        fontSize:
-                                            12,
-                                        color: Colors
-                                            .grey
-                                            .shade500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+          Text(
+            'Patient ID: $patientId',
+            textAlign:
+                TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color:
+                  Colors.grey.shade600,
+            ),
+          ),
 
-                              const SizedBox(
-                                height: 20,
-                              ),
+          const SizedBox(height: 24),
 
-                              SizedBox(
-                                width:
-                                    double.infinity,
-                                child:
-                                    ElevatedButton
-                                        .icon(
-                                  onPressed:
-                                      _showQrDialog,
-                                  icon:
-                                      const Icon(
-                                    Icons
-                                        .qr_code_2,
-                                  ),
-                                  label:
-                                      const Text(
-                                    'View QR Code',
-                                  ),
-                                  style:
-                                      ElevatedButton
-                                          .styleFrom(
-                                    backgroundColor:
-                                        Appcolors
-                                            .primary,
-                                    foregroundColor:
-                                        Colors
-                                            .white,
-                                    elevation:
-                                        0,
-                                    padding:
-                                        const EdgeInsets
-                                            .symmetric(
-                                      vertical:
-                                          15,
-                                    ),
-                                    shape:
-                                        RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius
-                                              .circular(
-                                        14,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
+          _buildQrPreview(),
 
-                              const SizedBox(
-                                height: 12,
-                              ),
+          const SizedBox(height: 20),
 
-                              SizedBox(
-                                width:
-                                    double.infinity,
-                                child:
-                                    OutlinedButton
-                                        .icon(
-                                  onPressed:
-                                      _isRegeneratingQr
-                                          ? null
-                                          : _regenerateQr,
-                                  icon:
-                                      _isRegeneratingQr
-                                          ? const SizedBox(
-                                              width: 18,
-                                              height: 18,
-                                              child:
-                                                  CircularProgressIndicator(
-                                                strokeWidth:
-                                                    2,
-                                              ),
-                                            )
-                                          : const Icon(
-                                              Icons
-                                                  .refresh,
-                                            ),
-                                  label:
-                                      Text(
-                                    _isRegeneratingQr
-                                        ? 'Regenerating...'
-                                        : 'Regenerate QR',
-                                  ),
-                                  style:
-                                      OutlinedButton
-                                          .styleFrom(
-                                    foregroundColor:
-                                        Appcolors
-                                            .primary,
-                                    side:
-                                        const BorderSide(
-                                      color:
-                                          Appcolors
-                                              .primary,
-                                    ),
-                                    padding:
-                                        const EdgeInsets
-                                            .symmetric(
-                                      vertical:
-                                          14,
-                                    ),
-                                    shape:
-                                        RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius
-                                              .circular(
-                                        14,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 20,
-                        ),
-
-                        Container(
-                          width:
-                              double.infinity,
-                          padding:
-                              const EdgeInsets
-                                  .all(18),
-                          decoration:
-                              BoxDecoration(
-                            color: Appcolors
-                                .primary
-                                .withOpacity(
-                              0.06,
-                            ),
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              18,
-                            ),
-                            border:
-                                Border.all(
-                              color: Appcolors
-                                  .primary
-                                  .withOpacity(
-                                0.12,
-                              ),
-                            ),
-                          ),
-                          child: Row(
-                            crossAxisAlignment:
-                                CrossAxisAlignment
-                                    .start,
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration:
-                                    BoxDecoration(
-                                  color: Appcolors
-                                      .primary
-                                      .withOpacity(
-                                    0.1,
-                                  ),
-                                  borderRadius:
-                                      BorderRadius
-                                          .circular(
-                                    12,
-                                  ),
-                                ),
-                                child:
-                                    const Icon(
-                                  Icons
-                                      .verified_user_outlined,
-                                  color:
-                                      Appcolors
-                                          .primary,
-                                  size: 22,
-                                ),
-                              ),
-
-                              const SizedBox(
-                                width: 12,
-                              ),
-
-                              Expanded(
-                                child:
-                                    Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment
-                                          .start,
-                                  children: [
-                                    const Text(
-                                      'Secure verification',
-                                      style:
-                                          TextStyle(
-                                        fontWeight:
-                                            FontWeight
-                                                .w700,
-                                        fontSize:
-                                            14,
-                                      ),
-                                    ),
-
-                                    const SizedBox(
-                                      height: 5,
-                                    ),
-
-                                    Text(
-                                      'Your QR code uses a secure verification link. Scanning it opens the MediVault public verification page instead of exposing your patient ID directly.',
-                                      style:
-                                          TextStyle(
-                                        fontSize:
-                                            12,
-                                        color: Colors
-                                            .grey
-                                            .shade600,
-                                        height:
-                                            1.4,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 24,
-                        ),
-                      ],
-                    ),
+          SizedBox(
+            width: double.infinity,
+            child:
+                ElevatedButton.icon(
+              onPressed:
+                  _showQrDialog,
+              icon: const Icon(
+                Icons.qr_code_2,
+              ),
+              label: const Text(
+                'View QR Code',
+              ),
+              style:
+                  ElevatedButton.styleFrom(
+                backgroundColor:
+                    Appcolors.primary,
+                foregroundColor:
+                    Colors.white,
+                elevation: 0,
+                padding:
+                    const EdgeInsets
+                        .symmetric(
+                  vertical: 15,
+                ),
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(
+                    14,
                   ),
                 ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          SizedBox(
+            width: double.infinity,
+            child:
+                OutlinedButton.icon(
+              onPressed:
+                  _isRegeneratingQr
+                      ? null
+                      : _regenerateQr,
+              icon: _isRegeneratingQr
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child:
+                          CircularProgressIndicator(
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.refresh,
+                    ),
+              label: Text(
+                _isRegeneratingQr
+                    ? 'Regenerating...'
+                    : 'Regenerate QR',
+              ),
+              style:
+                  OutlinedButton.styleFrom(
+                foregroundColor:
+                    Appcolors.primary,
+                side:
+                    const BorderSide(
+                  color:
+                      Appcolors.primary,
+                ),
+                padding:
+                    const EdgeInsets
+                        .symmetric(
+                  vertical: 14,
+                ),
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(
+                    14,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // QR PREVIEW
+  // ============================================================
+
+  Widget _buildQrPreview() {
+    return Container(
+      width: double.infinity,
+      padding:
+          const EdgeInsets.all(18),
+      decoration:
+          BoxDecoration(
+        color:
+            Colors.grey.shade50,
+        borderRadius:
+            BorderRadius.circular(18),
+        border: Border.all(
+          color:
+              Colors.grey.shade200,
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding:
+                const EdgeInsets.all(10),
+            decoration:
+                BoxDecoration(
+              color: Colors.white,
+              borderRadius:
+                  BorderRadius.circular(
+                14,
+              ),
+            ),
+            child: _qrPayloadUrl == null
+                ? const SizedBox(
+                    width: 105,
+                    height: 105,
+                    child:
+                        Center(
+                      child:
+                          CircularProgressIndicator(),
+                    ),
+                  )
+                : QrImageView(
+                    data:
+                        _qrPayloadUrl!,
+                    version:
+                        QrVersions.auto,
+                    size: 105,
+                    padding:
+                        EdgeInsets.zero,
+                  ),
+          ),
+
+          const SizedBox(height: 14),
+
+          Text(
+            'Scan to verify',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight:
+                  FontWeight.w600,
+              color:
+                  Colors.grey.shade800,
+            ),
+          ),
+
+          const SizedBox(height: 4),
+
+          Text(
+            'Secure MediVault verification',
+            style: TextStyle(
+              fontSize: 12,
+              color:
+                  Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // SECURITY CARD
+  // ============================================================
+
+  Widget _buildSecurityCard() {
+    return Container(
+      width: double.infinity,
+      padding:
+          const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Appcolors.primary
+            .withOpacity(0.06),
+        borderRadius:
+            BorderRadius.circular(18),
+        border: Border.all(
+          color: Appcolors.primary
+              .withOpacity(0.12),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration:
+                BoxDecoration(
+              color: Appcolors.primary
+                  .withOpacity(0.1),
+              borderRadius:
+                  BorderRadius.circular(
+                12,
+              ),
+            ),
+            child: const Icon(
+              Icons
+                  .verified_user_outlined,
+              color:
+                  Appcolors.primary,
+              size: 22,
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment
+                      .start,
+              children: [
+                const Text(
+                  'Secure verification',
+                  style: TextStyle(
+                    fontWeight:
+                        FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+
+                const SizedBox(height: 5),
+
+                Text(
+                  'Your QR code uses a secure verification link. Scanning it opens the MediVault public verification page instead of exposing your patient ID directly.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors
+                        .grey.shade600,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

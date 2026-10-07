@@ -6,6 +6,7 @@ import '../services/api_service.dart';
 import '../services/patient_service.dart';
 import '../utils/appcolors.dart';
 import '../utils/auth_storage.dart';
+import 'lab_reports_screen.dart';
 import 'medical_record_detail_screen.dart';
 
 class MedicalRecordScreen extends StatefulWidget {
@@ -21,14 +22,101 @@ class MedicalRecordScreen extends StatefulWidget {
       _MedicalRecordScreenState();
 }
 
-class _MedicalRecordScreenState
-    extends State<MedicalRecordScreen> {
+class _MedicalRecordScreenState extends State<MedicalRecordScreen> {
   final PatientService _patientService = PatientService();
   final ApiService _apiService = ApiService();
   final AuthStorage _authStorage = AuthStorage();
 
   final TextEditingController _searchController =
       TextEditingController();
+
+  static const List<String> _filters = [
+    'All',
+    'Diagnoses',
+    'Prescriptions',
+    'Vitals',
+    'Lab Reports',
+    'Documents',
+    'Vaccinations',
+    'Procedures',
+  ];
+
+  static const List<String> _diagnosisSearchFields = [
+    'diagnosis',
+    'diagnosisName',
+    'name',
+    'displayName',
+    'title',
+    'condition',
+    'description',
+    'details',
+    'notes',
+    'code',
+    'status',
+  ];
+
+  static const List<String> _prescriptionSearchFields = [
+    'medicationName',
+    'genericName',
+    'medication',
+    'drugName',
+    'dosage',
+    'frequency',
+    'route',
+    'duration',
+    'instructions',
+    'status',
+  ];
+
+  static const List<String> _vitalSearchFields = [
+    'bloodPressure',
+    'systolic',
+    'diastolic',
+    'heartRate',
+    'pulse',
+    'temperature',
+    'respiratoryRate',
+    'oxygenSaturation',
+    'spo2',
+    'weight',
+    'height',
+    'bmi',
+    'notes',
+  ];
+
+  static const List<String> _documentSearchFields = [
+    'title',
+    'documentTitle',
+    'name',
+    'reportName',
+    'documentName',
+    'type',
+    'documentType',
+    'description',
+    'fileName',
+    'originalName',
+    'category',
+    'sourceHospital',
+  ];
+
+  static const List<String> _vaccinationSearchFields = [
+    'name',
+    'vaccineName',
+    'vaccine',
+    'type',
+    'description',
+    'status',
+    'notes',
+  ];
+
+  static const List<String> _procedureSearchFields = [
+    'name',
+    'procedureName',
+    'type',
+    'description',
+    'status',
+    'notes',
+  ];
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -41,40 +129,163 @@ class _MedicalRecordScreenState
   List<dynamic> _diagnoses = [];
   List<dynamic> _prescriptions = [];
   List<dynamic> _vitals = [];
-
-  Map<String, dynamic>? _latestVital;
-
   List<dynamic> _documents = [];
   List<dynamic> _vaccinations = [];
   List<dynamic> _procedures = [];
+
+  Map<String, dynamic>? _latestVital;
 
   @override
   void initState() {
     super.initState();
 
-    _selectedFilter = widget.initialFilter;
+    _selectedFilter = _filters.contains(widget.initialFilter)
+        ? widget.initialFilter
+        : 'All';
 
-    _searchController.addListener(() {
-      if (!mounted) return;
-
-      setState(() {
-        _searchQuery =
-            _searchController.text.trim().toLowerCase();
-      });
-    });
+    _searchController.addListener(_onSearchChanged);
 
     _loadMedicalRecords();
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _searchController
+      ..removeListener(_onSearchChanged)
+      ..dispose();
+
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
-  // Load medical records
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // Search
+  // ---------------------------------------------------------------------------
+
+  void _onSearchChanged() {
+    if (!mounted) return;
+
+    final query = _searchController.text.trim().toLowerCase();
+
+    if (query == _searchQuery) return;
+
+    setState(() {
+      _searchQuery = query;
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Data helpers
+  // ---------------------------------------------------------------------------
+
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
+
+    return {};
+  }
+
+  Map<String, dynamic> _unwrapResponse(
+    Map<String, dynamic> response,
+  ) {
+    final data = response['data'];
+
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+
+    return response;
+  }
+
+  Map<String, dynamic> _recordData(dynamic record) {
+    final map = _asMap(record);
+
+    if (map.isEmpty) return {};
+
+    final nestedData = map['data'];
+
+    if (nestedData is Map) {
+      return {
+        ...map,
+        ...Map<String, dynamic>.from(nestedData),
+      };
+    }
+
+    return map;
+  }
+
+  List<dynamic> _asList(dynamic value) {
+    if (value is List) {
+      return List<dynamic>.from(value);
+    }
+
+    return [];
+  }
+
+  String _stringValue(
+    dynamic value, {
+    String fallback = '',
+  }) {
+    if (value == null) return fallback;
+
+    final text = value.toString().trim();
+
+    return text.isEmpty ? fallback : text;
+  }
+
+  String _getDisplayValue(
+    dynamic value, {
+    String fallback = '',
+  }) {
+    if (value == null) {
+      return fallback;
+    }
+
+    if (value is String ||
+        value is num ||
+        value is bool) {
+      return _stringValue(
+        value,
+        fallback: fallback,
+      );
+    }
+
+    if (value is Map) {
+      final map = _asMap(value);
+
+      const nestedKeys = [
+        'name',
+        'diagnosisName',
+        'displayName',
+        'title',
+        'label',
+        'condition',
+        'description',
+        'code',
+      ];
+
+      for (final key in nestedKeys) {
+        final nestedValue = map[key];
+
+        if (nestedValue != null) {
+          final result = _getDisplayValue(
+            nestedValue,
+            fallback: '',
+          );
+
+          if (result.isNotEmpty) {
+            return result;
+          }
+        }
+      }
+    }
+
+    return fallback;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Load records
+  // ---------------------------------------------------------------------------
 
   Future<void> _loadMedicalRecords() async {
     if (!mounted) return;
@@ -85,92 +296,44 @@ class _MedicalRecordScreenState
     });
 
     try {
-      // Get logged-in patient's profile.
       final patientResponse =
           await _patientService.getMyPatientProfile();
 
-      final patientData = patientResponse['data'];
+      final patientData =
+          _unwrapResponse(patientResponse);
 
-      if (patientData == null ||
-          patientData is! Map ||
-          patientData['_id'] == null) {
+      final patientId =
+          _stringValue(patientData['_id']);
+
+      if (patientId.isEmpty) {
         throw Exception(
           'Patient information could not be found.',
         );
       }
-
-      final String patientId =
-          patientData['_id'].toString();
-
-      print('========== MEDICAL RECORDS ==========');
-      print('PATIENT ID: $patientId');
-
-      // ─────────────────────────────────────────
-      // Medical history
-      // ─────────────────────────────────────────
 
       final historyResponse =
           await _patientService.getMedicalHistory(
         patientId,
       );
 
-      // Support both:
-      //
-      // {
-      //   "data": {
-      //     "diagnoses": [...]
-      //   }
-      // }
-      //
-      // and:
-      //
-      // {
-      //   "diagnoses": [...]
-      // }
-      final dynamic rawHistory =
-          historyResponse['data'];
+      final historyData =
+          _unwrapResponse(historyResponse);
 
-      final Map<String, dynamic> historyData =
-          rawHistory is Map
-              ? Map<String, dynamic>.from(rawHistory)
-              : historyResponse;
+      final diagnoses =
+          _asList(historyData['diagnoses']);
 
-      final diagnoses = List<dynamic>.from(
-        historyData['diagnoses'] ?? [],
-      );
+      final prescriptions =
+          _asList(historyData['prescriptions']);
 
-      final prescriptions = List<dynamic>.from(
-        historyData['prescriptions'] ?? [],
-      );
+      final vitals =
+          _asList(historyData['vitals']);
 
-      final vitals = List<dynamic>.from(
-        historyData['vitals'] ?? [],
-      );
+      final vaccinations =
+          _asList(historyData['vaccinations']);
 
-      final vaccinations = List<dynamic>.from(
-        historyData['vaccinations'] ?? [],
-      );
+      final procedures =
+          _asList(historyData['procedures']);
 
-      final procedures = List<dynamic>.from(
-        historyData['procedures'] ?? [],
-      );
-
-      // ─────────────────────────────────────────
-      // REAL uploaded documents
-      // ─────────────────────────────────────────
-      //
-      // IMPORTANT:
-      // Do NOT use historyData['labReports'] or
-      // historyData['imagingReports'] here.
-      //
-      // Those are medical-history records, not necessarily
-      // Document collection IDs.
-      //
-      // The document viewer requires the actual Document
-      // _id from:
-      //
-      // GET /patients/:patientId/documents
-      //
       final documents =
           await _loadPatientDocuments(patientId);
 
@@ -193,38 +356,27 @@ class _MedicalRecordScreenState
         _diagnoses = diagnoses;
         _prescriptions = prescriptions;
         _vitals = vitals;
-
-        _latestVital = latestVital;
-
         _documents = documents;
         _vaccinations = vaccinations;
         _procedures = procedures;
 
+        _latestVital = latestVital;
         _isLoading = false;
       });
-
-      print('DOCUMENT COUNT: ${documents.length}');
-      print('====================================');
-    } catch (e, stackTrace) {
-      print('========== MEDICAL RECORD ERROR ==========');
-      print('ERROR: $e');
-      print('STACK TRACE: $stackTrace');
-      print('==========================================');
-
+    } catch (e) {
       if (!mounted) return;
 
       setState(() {
         _isLoading = false;
         _errorMessage = e
             .toString()
-            .replaceFirst('Exception: ', '');
+            .replaceFirst(
+              'Exception: ',
+              '',
+            );
       });
     }
   }
-
-  // ─────────────────────────────────────────────
-  // Load actual patient documents
-  // ─────────────────────────────────────────────
 
   Future<List<dynamic>> _loadPatientDocuments(
     String patientId,
@@ -243,21 +395,18 @@ class _MedicalRecordScreenState
       token: token,
     );
 
-    print('========== PATIENT DOCUMENTS ==========');
-    print(
-      'DOCUMENT STATUS: ${response.statusCode}',
-    );
-    print(
-      'DOCUMENT RESPONSE: ${response.body}',
-    );
-
     if (response.statusCode != 200) {
       try {
-        final data =
+        final decoded =
             jsonDecode(response.body);
 
+        final errorData =
+            decoded is Map ? decoded['error'] : null;
+
         final message =
-            data['error']?['message'];
+            errorData is Map
+                ? errorData['message']
+                : null;
 
         throw Exception(
           message ??
@@ -282,119 +431,36 @@ class _MedicalRecordScreenState
     final decoded =
         jsonDecode(response.body);
 
-    final dynamic rawDocuments =
+    if (decoded is! Map) {
+      return [];
+    }
+
+    final rawDocuments =
         decoded['data'];
 
-    List<dynamic> documents = [];
-
     if (rawDocuments is List) {
-      documents =
-          List<dynamic>.from(
+      return List<dynamic>.from(
         rawDocuments,
       );
-    } else if (rawDocuments is Map) {
-      documents =
-          List<dynamic>.from(
+    }
+
+    if (rawDocuments is Map) {
+      return _asList(
         rawDocuments['documents'] ??
-            rawDocuments['items'] ??
-            [],
+            rawDocuments['items'],
       );
     }
 
-    print(
-      'DOCUMENT COUNT: ${documents.length}',
-    );
-
-    for (final document in documents) {
-      print(
-        'DOCUMENT: $document',
-      );
-
-      if (document is Map) {
-        print(
-          '  ID: ${document['_id']}',
-        );
-
-        print(
-          '  PATIENT ID: ${document['patientId']}',
-        );
-
-        print(
-          '  NAME: ${document['originalName']}',
-        );
-
-        print(
-          '  TITLE: ${document['documentTitle']}',
-        );
-
-        print(
-          '  MIME: ${document['mimeType']}',
-        );
-
-        print(
-          '  CATEGORY: ${document['category']}',
-        );
-      }
-    }
-
-    print(
-      '=======================================',
-    );
-
-    return documents;
+    return [];
   }
-
-  // ─────────────────────────────────────────────
-  // Refresh
-  // ─────────────────────────────────────────────
 
   Future<void> _refreshRecords() async {
     await _loadMedicalRecords();
   }
 
-  // ─────────────────────────────────────────────
-  // Safely unwrap medical record data
-  // ─────────────────────────────────────────────
-
-  Map<String, dynamic> _recordData(
-    dynamic record,
-  ) {
-    if (record is! Map) {
-      return {};
-    }
-
-    final map =
-        Map<String, dynamic>.from(record);
-
-    // Some medical records may be:
-    //
-    // {
-    //   "_id": "...",
-    //   "patientId": "...",
-    //   "data": {
-    //      "diagnosis": "..."
-    //   }
-    // }
-    //
-    // Keep BOTH the outer metadata and nested data.
-    if (map['data'] is Map) {
-      final nested =
-          Map<String, dynamic>.from(
-        map['data'],
-      );
-
-      return {
-        ...map,
-        ...nested,
-      };
-    }
-
-    return map;
-  }
-
-  // ─────────────────────────────────────────────
-  // Search
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // Search matching
+  // ---------------------------------------------------------------------------
 
   bool _matchesSearch(
     dynamic record,
@@ -404,8 +470,7 @@ class _MedicalRecordScreenState
       return true;
     }
 
-    final map =
-        _recordData(record);
+    final map = _recordData(record);
 
     if (map.isEmpty) {
       return false;
@@ -414,13 +479,19 @@ class _MedicalRecordScreenState
     for (final field in fields) {
       final value = map[field];
 
-      if (value != null &&
-          value
-              .toString()
-              .toLowerCase()
-              .contains(
-                _searchQuery,
-              )) {
+      if (value == null) continue;
+
+      final rawValue =
+          value.toString().toLowerCase();
+
+      if (rawValue.contains(_searchQuery)) {
+        return true;
+      }
+
+      final displayValue =
+          _getDisplayValue(value).toLowerCase();
+
+      if (displayValue.contains(_searchQuery)) {
         return true;
       }
     }
@@ -428,154 +499,65 @@ class _MedicalRecordScreenState
     return false;
   }
 
-  List<dynamic>
-      get _filteredDiagnoses {
-    return _diagnoses.where(
-      (diagnosis) {
-        return _matchesSearch(
-          diagnosis,
-          [
-            'diagnosis',
-            'name',
-            'condition',
-            'description',
-            'details',
-            'notes',
-            'code',
-            'status',
-          ],
-        );
-      },
-    ).toList();
+  List<dynamic> _filterRecords(
+    List<dynamic> records,
+    List<String> fields,
+  ) {
+    return records
+        .where(
+          (record) =>
+              _matchesSearch(record, fields),
+        )
+        .toList();
   }
 
-  List<dynamic>
-      get _filteredPrescriptions {
-    return _prescriptions.where(
-      (prescription) {
-        return _matchesSearch(
-          prescription,
-          [
-            'medicationName',
-            'genericName',
-            'medication',
-            'drugName',
-            'dosage',
-            'frequency',
-            'route',
-            'duration',
-            'instructions',
-            'status',
-          ],
-        );
-      },
-    ).toList();
-  }
+  List<dynamic> get _filteredDiagnoses =>
+      _filterRecords(
+        _diagnoses,
+        _diagnosisSearchFields,
+      );
 
-  List<dynamic> get _filteredVitals {
-    return _vitals.where(
-      (vital) {
-        return _matchesSearch(
-          vital,
-          [
-            'bloodPressure',
-            'systolic',
-            'diastolic',
-            'heartRate',
-            'pulse',
-            'temperature',
-            'respiratoryRate',
-            'oxygenSaturation',
-            'spo2',
-            'weight',
-            'height',
-            'bmi',
-            'notes',
-          ],
-        );
-      },
-    ).toList();
-  }
+  List<dynamic> get _filteredPrescriptions =>
+      _filterRecords(
+        _prescriptions,
+        _prescriptionSearchFields,
+      );
 
-  List<dynamic>
-      get _filteredDocuments {
-    return _documents.where(
-      (document) {
-        return _matchesSearch(
-          document,
-          [
-            'title',
-            'documentTitle',
-            'name',
-            'reportName',
-            'documentName',
-            'type',
-            'documentType',
-            'description',
-            'fileName',
-            'originalName',
-            'category',
-            'sourceHospital',
-          ],
-        );
-      },
-    ).toList();
-  }
+  List<dynamic> get _filteredVitals =>
+      _filterRecords(
+        _vitals,
+        _vitalSearchFields,
+      );
 
-  List<dynamic>
-      get _filteredVaccinations {
-    return _vaccinations.where(
-      (vaccination) {
-        return _matchesSearch(
-          vaccination,
-          [
-            'name',
-            'vaccineName',
-            'vaccine',
-            'type',
-            'description',
-            'status',
-            'notes',
-          ],
-        );
-      },
-    ).toList();
-  }
+  List<dynamic> get _filteredDocuments =>
+      _filterRecords(
+        _documents,
+        _documentSearchFields,
+      );
 
-  List<dynamic>
-      get _filteredProcedures {
-    return _procedures.where(
-      (procedure) {
-        return _matchesSearch(
-          procedure,
-          [
-            'name',
-            'procedureName',
-            'type',
-            'description',
-            'status',
-            'notes',
-          ],
-        );
-      },
-    ).toList();
-  }
+  List<dynamic> get _filteredVaccinations =>
+      _filterRecords(
+        _vaccinations,
+        _vaccinationSearchFields,
+      );
 
-  // ─────────────────────────────────────────────
+  List<dynamic> get _filteredProcedures =>
+      _filterRecords(
+        _procedures,
+        _procedureSearchFields,
+      );
+
+  // ---------------------------------------------------------------------------
   // Build
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          Appcolors.background,
+      backgroundColor: Appcolors.background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor:
-            Appcolors.background,
+        backgroundColor: Appcolors.background,
         elevation: 0,
         title: const Text(
           'Medical Records',
@@ -584,8 +566,7 @@ class _MedicalRecordScreenState
             fontWeight: FontWeight.bold,
           ),
         ),
-        iconTheme:
-            const IconThemeData(
+        iconTheme: const IconThemeData(
           color: Appcolors.primaryText,
         ),
       ),
@@ -596,8 +577,7 @@ class _MedicalRecordScreenState
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
-        child:
-            CircularProgressIndicator(
+        child: CircularProgressIndicator(
           color: Appcolors.primary,
         ),
       );
@@ -614,8 +594,7 @@ class _MedicalRecordScreenState
       child: ListView(
         physics:
             const AlwaysScrollableScrollPhysics(),
-        padding:
-            const EdgeInsets.fromLTRB(
+        padding: const EdgeInsets.fromLTRB(
           20,
           4,
           20,
@@ -623,73 +602,55 @@ class _MedicalRecordScreenState
         ),
         children: [
           _buildSearchBar(),
-
           const SizedBox(height: 16),
-
           _buildFilterChips(),
-
           const SizedBox(height: 20),
-
           _buildSummaryCards(),
-
           const SizedBox(height: 24),
-
           _buildRecordContent(),
         ],
       ),
     );
   }
 
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
   // Search bar
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   Widget _buildSearchBar() {
     return Container(
-      decoration:
-          BoxDecoration(
+      decoration: BoxDecoration(
         color: Appcolors.surface,
-        borderRadius:
-            BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: Appcolors.border,
         ),
       ),
       child: TextField(
-        controller:
-            _searchController,
-        decoration:
-            InputDecoration(
+        controller: _searchController,
+        decoration: InputDecoration(
           hintText:
               'Search medical records...',
-          hintStyle:
-              const TextStyle(
-            color:
-                Appcolors.secondaryText,
+          hintStyle: const TextStyle(
+            color: Appcolors.secondaryText,
           ),
-          prefixIcon:
-              const Icon(
+          prefixIcon: const Icon(
             Icons.search,
-            color:
-                Appcolors.secondaryText,
+            color: Appcolors.secondaryText,
           ),
           suffixIcon:
               _searchQuery.isNotEmpty
                   ? IconButton(
-                      onPressed: () {
-                        _searchController
-                            .clear();
-                      },
-                      icon:
-                          const Icon(
+                      onPressed:
+                          _searchController.clear,
+                      icon: const Icon(
                         Icons.close,
-                        color: Appcolors
-                            .secondaryText,
+                        color:
+                            Appcolors.secondaryText,
                       ),
                     )
                   : null,
-          border:
-              InputBorder.none,
+          border: InputBorder.none,
           contentPadding:
               const EdgeInsets.symmetric(
             horizontal: 16,
@@ -700,76 +661,47 @@ class _MedicalRecordScreenState
     );
   }
 
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
   // Filters
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   Widget _buildFilterChips() {
-    final filters = [
-      'All',
-      'Diagnoses',
-      'Prescriptions',
-      'Vitals',
-      'Documents',
-      'Vaccinations',
-      'Procedures',
-    ];
-
     return SizedBox(
       height: 42,
-      child:
-          ListView.separated(
-        scrollDirection:
-            Axis.horizontal,
-        itemCount:
-            filters.length,
-        separatorBuilder:
-            (_, __) =>
-                const SizedBox(
-          width: 8,
-        ),
-        itemBuilder:
-            (context, index) {
-          final filter =
-              filters[index];
-
-          final bool isSelected =
-              _selectedFilter ==
-                  filter;
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _filters.length,
+        separatorBuilder: (_, __) =>
+            const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final filter = _filters[index];
+          final isSelected =
+              _selectedFilter == filter;
 
           return GestureDetector(
             onTap: () {
+              if (isSelected) return;
+
               setState(() {
-                _selectedFilter =
-                    filter;
+                _selectedFilter = filter;
               });
             },
             child: Container(
               padding:
-                  const EdgeInsets
-                      .symmetric(
+                  const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 10,
               ),
-              decoration:
-                  BoxDecoration(
+              decoration: BoxDecoration(
                 color: isSelected
-                    ? Appcolors
-                        .primary
-                    : Appcolors
-                        .surface,
+                    ? Appcolors.primary
+                    : Appcolors.surface,
                 borderRadius:
-                    BorderRadius
-                        .circular(
-                  22,
-                ),
-                border:
-                    Border.all(
+                    BorderRadius.circular(22),
+                border: Border.all(
                   color: isSelected
-                      ? Appcolors
-                          .primary
-                      : Appcolors
-                          .border,
+                      ? Appcolors.primary
+                      : Appcolors.border,
                 ),
               ),
               child: Text(
@@ -777,14 +709,10 @@ class _MedicalRecordScreenState
                 style: TextStyle(
                   color: isSelected
                       ? Colors.white
-                      : Appcolors
-                          .secondaryText,
-                  fontWeight:
-                      isSelected
-                          ? FontWeight
-                              .w600
-                          : FontWeight
-                              .w500,
+                      : Appcolors.secondaryText,
+                  fontWeight: isSelected
+                      ? FontWeight.w600
+                      : FontWeight.w500,
                 ),
               ),
             ),
@@ -794,35 +722,27 @@ class _MedicalRecordScreenState
     );
   }
 
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
   // Summary
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   Widget _buildSummaryCards() {
     return Row(
       children: [
         Expanded(
-          child:
-              _buildSummaryCard(
+          child: _buildSummaryCard(
             title: 'Diagnoses',
-            count:
-                _diagnoses.length,
-            icon: Icons
-                .medical_information_outlined,
+            count: _diagnoses.length,
+            icon:
+                Icons.medical_information_outlined,
           ),
         ),
-        const SizedBox(
-          width: 12,
-        ),
+        const SizedBox(width: 12),
         Expanded(
-          child:
-              _buildSummaryCard(
-            title:
-                'Prescriptions',
-            count:
-                _prescriptions.length,
-            icon: Icons
-                .medication_outlined,
+          child: _buildSummaryCard(
+            title: 'Prescriptions',
+            count: _prescriptions.length,
+            icon: Icons.medication_outlined,
           ),
         ),
       ],
@@ -835,17 +755,10 @@ class _MedicalRecordScreenState
     required IconData icon,
   }) {
     return Container(
-      padding:
-          const EdgeInsets.all(
-        16,
-      ),
-      decoration:
-          BoxDecoration(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
         color: Appcolors.surface,
-        borderRadius:
-            BorderRadius.circular(
-          16,
-        ),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: Appcolors.border,
         ),
@@ -855,52 +768,40 @@ class _MedicalRecordScreenState
           Container(
             height: 44,
             width: 44,
-            decoration:
-                BoxDecoration(
-              color: Appcolors
-                  .primary
-                  .withValues(
+            decoration: BoxDecoration(
+              color: Appcolors.primary.withValues(
                 alpha: 0.1,
               ),
               borderRadius:
-                  BorderRadius.circular(
-                12,
-              ),
+                  BorderRadius.circular(12),
             ),
             child: Icon(
               icon,
-              color:
-                  Appcolors.primary,
+              color: Appcolors.primary,
             ),
           ),
-          const SizedBox(
-            width: 12,
-          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment:
-                  CrossAxisAlignment
-                      .start,
+                  CrossAxisAlignment.start,
               children: [
                 Text(
                   count.toString(),
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight:
-                        FontWeight
-                            .bold,
-                    color: Appcolors
-                        .primaryText,
+                        FontWeight.bold,
+                    color:
+                        Appcolors.primaryText,
                   ),
                 ),
                 Text(
                   title,
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: Appcolors
-                        .secondaryText,
+                    color:
+                        Appcolors.secondaryText,
                   ),
                 ),
               ],
@@ -911,248 +812,103 @@ class _MedicalRecordScreenState
     );
   }
 
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
   // Record content
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   Widget _buildRecordContent() {
-    final List<Widget> sections =
-        [];
+    final sections = <Widget>[];
 
-    // Diagnoses
-    if (_selectedFilter ==
-            'All' ||
-        _selectedFilter ==
-            'Diagnoses') {
-      if (_filteredDiagnoses
-          .isNotEmpty) {
-        sections.add(
-          _buildSection(
-            title: 'Diagnoses',
-            icon: Icons
-                .medical_information_outlined,
-            children:
-                _filteredDiagnoses
-                    .map(
-                      (diagnosis) =>
-                          _buildDiagnosisCard(
-                        diagnosis,
-                      ),
-                    )
-                    .toList(),
-          ),
-        );
-      }
+    _addSectionIf(
+      sections,
+      enabled: _selectedFilter == 'All' ||
+          _selectedFilter == 'Diagnoses',
+      records: _filteredDiagnoses,
+      title: 'Diagnoses',
+      icon:
+          Icons.medical_information_outlined,
+      builder: _buildDiagnosisCard,
+    );
+
+    _addSectionIf(
+      sections,
+      enabled: _selectedFilter == 'All' ||
+          _selectedFilter == 'Prescriptions',
+      records: _filteredPrescriptions,
+      title: 'Prescriptions',
+      icon: Icons.medication_outlined,
+      builder: _buildPrescriptionCard,
+    );
+
+    _addVitalsSection(sections);
+
+    if (_selectedFilter == 'All' ||
+        _selectedFilter == 'Lab Reports') {
+      sections.add(
+        _buildLabReportsSection(),
+      );
     }
 
-    // Prescriptions
-    if (_selectedFilter ==
-            'All' ||
-        _selectedFilter ==
-            'Prescriptions') {
-      if (_filteredPrescriptions
-          .isNotEmpty) {
-        sections.add(
-          _buildSection(
-            title:
-                'Prescriptions',
-            icon: Icons
-                .medication_outlined,
-            children:
-                _filteredPrescriptions
-                    .map(
-                      (prescription) =>
-                          _buildPrescriptionCard(
-                        prescription,
-                      ),
-                    )
-                    .toList(),
-          ),
-        );
-      }
-    }
+    _addSectionIf(
+      sections,
+      enabled: _selectedFilter == 'All' ||
+          _selectedFilter == 'Documents',
+      records: _filteredDocuments,
+      title: 'Documents',
+      icon: Icons.description_outlined,
+      builder: _buildDocumentCard,
+    );
 
-    // Vitals
-    if (_selectedFilter ==
-            'All' ||
-        _selectedFilter ==
-            'Vitals') {
-      if (_selectedFilter ==
-          'Vitals') {
-        if (_filteredVitals
-            .isNotEmpty) {
-          sections.add(
-            _buildSection(
-              title:
-                  'Vital Signs',
-              icon: Icons
-                  .monitor_heart_outlined,
-              children:
-                  _filteredVitals
-                      .map(
-                        (vital) =>
-                            _buildVitalCard(
-                          _recordData(
-                            vital,
-                          ),
-                        ),
-                      )
-                      .toList(),
-            ),
-          );
-        }
-      } else if (_latestVital !=
-          null) {
-        final latestMatches =
-            _matchesSearch(
-          _latestVital,
-          [
-            'bloodPressure',
-            'systolic',
-            'diastolic',
-            'heartRate',
-            'pulse',
-            'temperature',
-            'respiratoryRate',
-            'oxygenSaturation',
-            'spo2',
-            'weight',
-            'height',
-            'bmi',
-            'notes',
-          ],
-        );
+    _addSectionIf(
+      sections,
+      enabled: _selectedFilter == 'All' ||
+          _selectedFilter == 'Vaccinations',
+      records: _filteredVaccinations,
+      title: 'Vaccinations',
+      icon: Icons.vaccines_outlined,
+      builder: (record) =>
+          _buildGenericRecordCard(
+        record,
+        Icons.vaccines_outlined,
+      ),
+    );
 
-        if (latestMatches) {
-          sections.add(
-            _buildSection(
-              title:
-                  'Latest Vital',
-              icon: Icons
-                  .monitor_heart_outlined,
-              children: [
-                _buildVitalCard(
-                  _latestVital!,
-                ),
-              ],
-            ),
-          );
-        }
-      }
-    }
-
-    // Documents
-    if (_selectedFilter ==
-            'All' ||
-        _selectedFilter ==
-            'Documents') {
-      if (_filteredDocuments
-          .isNotEmpty) {
-        sections.add(
-          _buildSection(
-            title: 'Documents',
-            icon: Icons
-                .description_outlined,
-            children:
-                _filteredDocuments
-                    .map(
-                      (document) =>
-                          _buildDocumentCard(
-                        document,
-                      ),
-                    )
-                    .toList(),
-          ),
-        );
-      }
-    }
-
-    // Vaccinations
-    if (_selectedFilter ==
-            'All' ||
-        _selectedFilter ==
-            'Vaccinations') {
-      if (_filteredVaccinations
-          .isNotEmpty) {
-        sections.add(
-          _buildSection(
-            title:
-                'Vaccinations',
-            icon: Icons
-                .vaccines_outlined,
-            children:
-                _filteredVaccinations
-                    .map(
-                      (vaccination) =>
-                          _buildGenericRecordCard(
-                        vaccination,
-                        Icons
-                            .vaccines_outlined,
-                      ),
-                    )
-                    .toList(),
-          ),
-        );
-      }
-    }
-
-    // Procedures
-    if (_selectedFilter ==
-            'All' ||
-        _selectedFilter ==
-            'Procedures') {
-      if (_filteredProcedures
-          .isNotEmpty) {
-        sections.add(
-          _buildSection(
-            title: 'Procedures',
-            icon: Icons
-                .healing_outlined,
-            children:
-                _filteredProcedures
-                    .map(
-                      (procedure) =>
-                          _buildGenericRecordCard(
-                        procedure,
-                        Icons
-                            .healing_outlined,
-                      ),
-                    )
-                    .toList(),
-          ),
-        );
-      }
-    }
+    _addSectionIf(
+      sections,
+      enabled: _selectedFilter == 'All' ||
+          _selectedFilter == 'Procedures',
+      records: _filteredProcedures,
+      title: 'Procedures',
+      icon: Icons.healing_outlined,
+      builder: (record) =>
+          _buildGenericRecordCard(
+        record,
+        Icons.healing_outlined,
+      ),
+    );
 
     if (sections.isEmpty) {
       return _buildEmptyState(
         title: _searchQuery.isEmpty
             ? 'No medical records yet'
             : 'No matching records',
-        message:
-            _searchQuery.isEmpty
-                ? 'Your medical records will appear here when they are added.'
-                : 'Try another search term or select a different filter.',
-        icon:
-            _searchQuery.isEmpty
-                ? Icons
-                    .folder_open_outlined
-                : Icons
-                    .search_off_outlined,
+        message: _searchQuery.isEmpty
+            ? 'Your medical records will appear here when they are added.'
+            : 'Try another search term or select a different filter.',
+        icon: _searchQuery.isEmpty
+            ? Icons.folder_open_outlined
+            : Icons.search_off_outlined,
       );
     }
 
     return Column(
       crossAxisAlignment:
-          CrossAxisAlignment
-              .start,
+          CrossAxisAlignment.start,
       children: sections
           .map(
-            (section) =>
-                Padding(
+            (section) => Padding(
               padding:
-                  const EdgeInsets
-                      .only(
+                  const EdgeInsets.only(
                 bottom: 20,
               ),
               child: section,
@@ -1162,9 +918,181 @@ class _MedicalRecordScreenState
     );
   }
 
-  // ─────────────────────────────────────────────
+  void _addSectionIf(
+    List<Widget> sections, {
+    required bool enabled,
+    required List<dynamic> records,
+    required String title,
+    required IconData icon,
+    required Widget Function(dynamic) builder,
+  }) {
+    if (!enabled || records.isEmpty) return;
+
+    sections.add(
+      _buildSection(
+        title: title,
+        icon: icon,
+        children: records
+            .map(builder)
+            .toList(),
+      ),
+    );
+  }
+
+  void _addVitalsSection(
+    List<Widget> sections,
+  ) {
+    final showVitals =
+        _selectedFilter == 'All' ||
+            _selectedFilter == 'Vitals';
+
+    if (!showVitals) return;
+
+    if (_selectedFilter == 'Vitals') {
+      _addSectionIf(
+        sections,
+        enabled: true,
+        records: _filteredVitals,
+        title: 'Vital Signs',
+        icon:
+            Icons.monitor_heart_outlined,
+        builder: (vital) =>
+            _buildVitalCard(
+          _recordData(vital),
+        ),
+      );
+
+      return;
+    }
+
+    if (_latestVital == null) return;
+
+    final latestMatches =
+        _matchesSearch(
+      _latestVital,
+      _vitalSearchFields,
+    );
+
+    if (!latestMatches) return;
+
+    sections.add(
+      _buildSection(
+        title: 'Latest Vital',
+        icon:
+            Icons.monitor_heart_outlined,
+        children: [
+          _buildVitalCard(
+            _latestVital!,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Lab reports
+  // ---------------------------------------------------------------------------
+
+  Widget _buildLabReportsSection() {
+    return _buildSection(
+      title: 'Lab Reports',
+      icon: Icons.science_outlined,
+      children: [
+        Material(
+          color: Appcolors.surface,
+          borderRadius:
+              BorderRadius.circular(18),
+          child: InkWell(
+            borderRadius:
+                BorderRadius.circular(18),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      const LabReportsScreen(),
+                ),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                borderRadius:
+                    BorderRadius.circular(18),
+                border: Border.all(
+                  color: Appcolors.border,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Appcolors.primary
+                          .withValues(
+                        alpha: 0.1,
+                      ),
+                      borderRadius:
+                          BorderRadius.circular(
+                        14,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.science_outlined,
+                      color:
+                          Appcolors.primary,
+                      size: 26,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment
+                              .start,
+                      children: [
+                        Text(
+                          'Laboratory Reports',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight:
+                                FontWeight.w700,
+                            color: Appcolors
+                                .primaryText,
+                          ),
+                        ),
+                        SizedBox(height: 5),
+                        Text(
+                          'View your laboratory test results',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Appcolors
+                                .secondaryText,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right,
+                    color:
+                        Appcolors.secondaryText,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Section
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   Widget _buildSection({
     required String title,
@@ -1173,191 +1101,298 @@ class _MedicalRecordScreenState
   }) {
     return Column(
       crossAxisAlignment:
-          CrossAxisAlignment
-              .start,
+          CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Icon(
               icon,
               size: 20,
-              color:
-                  Appcolors.primary,
+              color: Appcolors.primary,
             ),
-            const SizedBox(
-              width: 8,
-            ),
+            const SizedBox(width: 8),
             Text(
               title,
-              style:
-                  const TextStyle(
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight:
                     FontWeight.bold,
-                color: Appcolors
-                    .primaryText,
+                color:
+                    Appcolors.primaryText,
               ),
             ),
           ],
         ),
-        const SizedBox(
-          height: 12,
-        ),
+        const SizedBox(height: 12),
         ...children,
       ],
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Diagnosis card
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // Navigation
+  // ---------------------------------------------------------------------------
+
+  void _openDetail({
+    required String type,
+    required dynamic record,
+  }) {
+    final map = _recordData(record);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            MedicalRecordDetailScreen(
+          type: type,
+          record: record is Map
+              ? Map<String, dynamic>.from(
+                  record,
+                )
+              : map,
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Diagnosis
+  // ---------------------------------------------------------------------------
 
   Widget _buildDiagnosisCard(
     dynamic diagnosis,
   ) {
-    final map =
-        _recordData(diagnosis);
+    final map = _recordData(diagnosis);
 
-    final title =
-        map['diagnosis'] ??
-            map['name'] ??
-            map['condition'] ??
-            'Diagnosis';
+    final title = _firstDisplayValue(
+      map,
+      [
+        'diagnosis',
+        'diagnosisName',
+        'name',
+        'displayName',
+        'title',
+        'condition',
+      ],
+      fallback: 'Diagnosis',
+    );
 
-    final description =
-        map['description'] ??
-            map['details'] ??
-            map['notes'] ??
-            '';
+    final description = _firstDisplayValue(
+      map,
+      [
+        'description',
+        'details',
+        'notes',
+      ],
+    );
 
     final status =
-        map['status']?.toString();
+        _getDisplayValue(map['status']);
 
     return _buildRecordCard(
-      icon: Icons
-          .medical_information_outlined,
-      title: title.toString(),
-      subtitle:
-          description.toString(),
-      trailing: status,
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                MedicalRecordDetailScreen(
-              type: 'diagnosis',
-              record: diagnosis
-                      is Map
-                  ? Map<String,
-                          dynamic>.from(
-                      diagnosis,
-                    )
-                  : map,
-            ),
-          ),
-        );
-      },
+      icon:
+          Icons.medical_information_outlined,
+      title: title,
+      subtitle: description,
+      trailing:
+          status.isNotEmpty ? status : null,
+      onTap: () => _openDetail(
+        type: 'diagnosis',
+        record: diagnosis,
+      ),
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Prescription card
-  // ─────────────────────────────────────────────
+  String _firstDisplayValue(
+    Map<String, dynamic> map,
+    List<String> keys, {
+    String fallback = '',
+  }) {
+    for (final key in keys) {
+      final value =
+          _getDisplayValue(map[key]);
+
+      if (value.isNotEmpty) {
+        return value;
+      }
+    }
+
+    return fallback;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Prescription
+  // ---------------------------------------------------------------------------
 
   Widget _buildPrescriptionCard(
     dynamic prescription,
   ) {
     final map =
-        _recordData(
-      prescription,
-    );
+        _recordData(prescription);
 
     final medicationName =
-        map['medicationName'] ??
-            map['genericName'] ??
-            map['medication'] ??
-            map['drugName'] ??
-            'Prescription';
+        _firstDisplayValue(
+      map,
+      [
+        'medicationName',
+        'medicineName',
+        'medication',
+        'drugName',
+        'name',
+        'genericName',
+      ],
+      fallback: 'Prescription',
+    );
 
     final genericName =
-        map['genericName'];
+        _stringValue(map['genericName']);
 
     final dosage =
-        map['dosage']?.toString();
+        _stringValue(
+      map['dosage'] ?? map['dose'],
+    );
 
     final frequency =
-        map['frequency']?.toString();
+        _stringValue(
+      map['frequency'] ??
+          map['doseFrequency'] ??
+          map['schedule'],
+    );
 
-    final bool isActive =
-        map['isActive'] == true ||
-        map['status']
-                ?.toString()
-                .toLowerCase() ==
-            'active';
+    final subtitleParts = <String>[];
+
+    if (genericName.isNotEmpty &&
+        genericName != medicationName) {
+      subtitleParts.add(genericName);
+    }
+
+    if (dosage.isNotEmpty) {
+      subtitleParts.add(dosage);
+    }
+
+    if (frequency.isNotEmpty) {
+      subtitleParts.add(frequency);
+    }
+
+    final isActive =
+        _isPrescriptionActive(map);
 
     return _buildRecordCard(
-      icon: Icons
-          .medication_outlined,
-      title:
-          medicationName.toString(),
-      subtitle: [
-        if (genericName != null &&
-            genericName
-                .toString()
-                .isNotEmpty &&
-            genericName.toString() !=
-                medicationName
-                    .toString())
-          genericName.toString(),
-        if (dosage != null &&
-            dosage.isNotEmpty)
-          dosage,
-        if (frequency != null &&
-            frequency.isNotEmpty)
-          frequency,
-      ].join(' • '),
-      trailing: isActive
-          ? 'Active'
-          : 'Inactive',
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                MedicalRecordDetailScreen(
-              type: 'prescription',
-              record: prescription
-                      is Map
-                  ? Map<String,
-                          dynamic>.from(
-                      prescription,
-                    )
-                  : map,
-            ),
-          ),
-        );
-      },
+      icon: Icons.medication_outlined,
+      title: medicationName,
+      subtitle:
+          subtitleParts.join(' • '),
+      trailing:
+          isActive ? 'Active' : 'Inactive',
+      onTap: () => _openDetail(
+        type: 'prescription',
+        record: prescription,
+      ),
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Vital card
-  // ─────────────────────────────────────────────
+  bool _isPrescriptionActive(
+    Map<String, dynamic> prescription,
+  ) {
+    final rawIsActive =
+        prescription['isActive'];
+
+    if (rawIsActive is bool) {
+      return rawIsActive;
+    }
+
+    if (rawIsActive is String) {
+      final value =
+          rawIsActive.toLowerCase().trim();
+
+      if (_activeStatuses.contains(value)) {
+        return true;
+      }
+
+      if (_inactiveStatuses.contains(value)) {
+        return false;
+      }
+    }
+
+    final status =
+        _stringValue(
+      prescription['status'] ??
+          prescription['prescriptionStatus'],
+    ).toLowerCase();
+
+    if (_activeStatuses.contains(status)) {
+      return true;
+    }
+
+    if (_inactiveStatuses.contains(status)) {
+      return false;
+    }
+
+    final endDate =
+        prescription['endedAt'] ??
+            prescription['expiresAt'] ??
+            prescription['endDate'];
+
+    if (endDate != null) {
+      try {
+        final date =
+            DateTime.parse(
+          endDate.toString(),
+        );
+
+        if (date.isBefore(DateTime.now())) {
+          return false;
+        }
+      } catch (_) {
+        // Ignore invalid dates and fall back
+        // to the default active state.
+      }
+    }
+
+    return true;
+  }
+
+  static const Set<String> _activeStatuses = {
+    'true',
+    'active',
+    'ongoing',
+    'current',
+    'in_progress',
+    'in progress',
+  };
+
+  static const Set<String> _inactiveStatuses = {
+    'false',
+    'ended',
+    'inactive',
+    'completed',
+    'cancelled',
+    'canceled',
+    'stopped',
+    'discontinued',
+    'expired',
+  };
+
+  // ---------------------------------------------------------------------------
+  // Vitals
+  // ---------------------------------------------------------------------------
 
   Widget _buildVitalCard(
     Map<String, dynamic> vital,
   ) {
     final bloodPressure =
-        vital['bloodPressure']
-            ?.toString();
+        _stringValue(
+      vital['bloodPressure'] ??
+          vital['bp'],
+    );
 
     final heartRate =
         vital['heartRate'] ??
             vital['pulse'];
 
     final temperature =
-        vital['temperature'];
+        vital['temperature'] ??
+            vital['temp'];
 
     final oxygen =
         vital['oxygenSaturation'] ??
@@ -1368,8 +1403,7 @@ class _MedicalRecordScreenState
 
     final parts = <String>[];
 
-    if (bloodPressure != null &&
-        bloodPressure.isNotEmpty) {
+    if (bloodPressure.isNotEmpty) {
       parts.add(
         'BP: $bloodPressure',
       );
@@ -1400,212 +1434,195 @@ class _MedicalRecordScreenState
     }
 
     return _buildRecordCard(
-      icon: Icons
-          .monitor_heart_outlined,
+      icon:
+          Icons.monitor_heart_outlined,
       title: 'Vital Signs',
       subtitle: parts.isEmpty
           ? 'View vital sign details'
           : parts.join(' • '),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                MedicalRecordDetailScreen(
-              type: 'vital',
-              record: vital,
-            ),
-          ),
-        );
-      },
+      onTap: () => _openDetail(
+        type: 'vital',
+        record: vital,
+      ),
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Document card
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // Documents
+  // ---------------------------------------------------------------------------
 
   Widget _buildDocumentCard(
     dynamic document,
   ) {
-    final documentMap =
+    final map =
         _recordData(document);
 
-    final title =
-        documentMap['documentTitle'] ??
-            documentMap['title'] ??
-            documentMap['name'] ??
-            documentMap['reportName'] ??
-            documentMap['documentName'] ??
-            documentMap['originalName'] ??
-            documentMap['fileName'] ??
-            'Medical Document';
+    final title = _firstDisplayValue(
+      map,
+      [
+        'documentTitle',
+        'title',
+        'name',
+        'reportName',
+        'documentName',
+        'originalName',
+        'fileName',
+      ],
+      fallback: 'Medical Document',
+    );
 
-    final type =
-        documentMap['category'] ??
-            documentMap['documentType'] ??
-            documentMap['type'] ??
-            documentMap['mimeType'] ??
-            'Document';
+    final type = _firstDisplayValue(
+      map,
+      [
+        'category',
+        'documentType',
+        'type',
+        'mimeType',
+      ],
+      fallback: 'Document',
+    );
 
-    final date =
-        documentMap['documentDate'] ??
-            documentMap['date'] ??
-            documentMap['createdAt'] ??
-            documentMap['uploadedAt'] ??
-            '';
+    final date = _firstDisplayValue(
+      map,
+      [
+        'documentDate',
+        'date',
+        'createdAt',
+        'uploadedAt',
+      ],
+    );
 
-    return GestureDetector(
-      onTap: () {
-        final documentId =
-            documentMap['_id'];
+    return _buildDocumentContainer(
+      title: title,
+      type: type,
+      date: date,
+      onTap: () => _openDetail(
+        type: 'document',
+        record: document,
+      ),
+    );
+  }
 
-        print(
-          '========== OPEN DOCUMENT =========='
-        );
-        print(
-          'DOCUMENT ID: $documentId',
-        );
-        print(
-          'PATIENT ID: ${documentMap['patientId']}',
-        );
-        print(
-          'DOCUMENT: $document',
-        );
-        print(
-          '====================================',
-        );
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                MedicalRecordDetailScreen(
-              type: 'document',
-              record: document
-                      is Map
-                  ? Map<String,
-                          dynamic>.from(
-                      document,
-                    )
-                  : documentMap,
-            ),
-          ),
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding:
-            const EdgeInsets.all(
-          16,
+  Widget _buildDocumentContainer({
+    required String title,
+    required String type,
+    required String date,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin:
+          const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Appcolors.surface,
+        borderRadius:
+            BorderRadius.circular(18),
+        border: Border.all(
+          color: Appcolors.border,
         ),
-        decoration:
-            BoxDecoration(
-          color: Appcolors.surface,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius:
+            BorderRadius.circular(18),
+        child: InkWell(
           borderRadius:
-              BorderRadius.circular(
-            18,
-          ),
-          border: Border.all(
-            color: Appcolors.border,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration:
-                  BoxDecoration(
-                color: Appcolors
-                    .primary
-                    .withValues(
-                  alpha: 0.1,
+              BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding:
+                const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: Appcolors.primary
+                        .withValues(
+                      alpha: 0.1,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(
+                      13,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons
+                        .description_outlined,
+                    color:
+                        Appcolors.primary,
+                    size: 24,
+                  ),
                 ),
-                borderRadius:
-                    BorderRadius.circular(
-                  13,
-                ),
-              ),
-              child: const Icon(
-                Icons
-                    .description_outlined,
-                color:
-                    Appcolors.primary,
-                size: 24,
-              ),
-            ),
-            const SizedBox(
-              width: 12,
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
-                children: [
-                  Text(
-                    title.toString(),
-                    maxLines: 2,
-                    overflow:
-                        TextOverflow
-                            .ellipsis,
-                    style:
-                        const TextStyle(
-                      fontSize: 15,
-                      fontWeight:
-                          FontWeight.bold,
-                      color: Appcolors
-                          .primaryText,
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 4,
-                  ),
-                  Text(
-                    type.toString(),
-                    style:
-                        const TextStyle(
-                      fontSize: 12,
-                      color:
-                          Appcolors.primary,
-                      fontWeight:
-                          FontWeight.w600,
-                    ),
-                  ),
-                  if (date
-                      .toString()
-                      .isNotEmpty) ...[
-                    const SizedBox(
-                      height: 4,
-                    ),
-                    Text(
-                      date.toString(),
-                      style:
-                          const TextStyle(
-                        fontSize: 11,
-                        color: Appcolors
-                            .secondaryText,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment
+                            .start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow:
+                            TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(
+                          fontSize: 15,
+                          fontWeight:
+                              FontWeight.bold,
+                          color: Appcolors
+                              .primaryText,
+                        ),
                       ),
-                    ),
-                  ],
-                ],
-              ),
+                      const SizedBox(
+                        height: 4,
+                      ),
+                      Text(
+                        type,
+                        style:
+                            const TextStyle(
+                          fontSize: 12,
+                          color:
+                              Appcolors.primary,
+                          fontWeight:
+                              FontWeight.w600,
+                        ),
+                      ),
+                      if (date.isNotEmpty) ...[
+                        const SizedBox(
+                          height: 4,
+                        ),
+                        Text(
+                          date,
+                          style:
+                              const TextStyle(
+                            fontSize: 11,
+                            color: Appcolors
+                                .secondaryText,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right,
+                  color:
+                      Appcolors.secondaryText,
+                ),
+              ],
             ),
-            const Icon(
-              Icons.chevron_right,
-              color:
-                  Appcolors.secondaryText,
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Generic record card
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // Generic records
+  // ---------------------------------------------------------------------------
 
   Widget _buildGenericRecordCard(
     dynamic record,
@@ -1614,50 +1631,43 @@ class _MedicalRecordScreenState
     final map =
         _recordData(record);
 
-    final title =
-        map['name'] ??
-            map['title'] ??
-            map['vaccineName'] ??
-            map['procedureName'] ??
-            map['type'] ??
-            'Medical Record';
+    final title = _firstDisplayValue(
+      map,
+      [
+        'name',
+        'title',
+        'vaccineName',
+        'procedureName',
+        'type',
+      ],
+      fallback: 'Medical Record',
+    );
 
-    final subtitle =
-        map['description'] ??
-            map['notes'] ??
-            map['date'] ??
-            map['administeredAt'] ??
-            map['performedAt'] ??
-            '';
+    final subtitle = _firstDisplayValue(
+      map,
+      [
+        'description',
+        'notes',
+        'date',
+        'administeredAt',
+        'performedAt',
+      ],
+    );
 
     return _buildRecordCard(
       icon: icon,
-      title: title.toString(),
-      subtitle:
-          subtitle.toString(),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                MedicalRecordDetailScreen(
-              type: 'generic',
-              record: record is Map
-                  ? Map<String,
-                          dynamic>.from(
-                      record,
-                    )
-                  : map,
-            ),
-          ),
-        );
-      },
+      title: title,
+      subtitle: subtitle,
+      onTap: () => _openDetail(
+        type: 'generic',
+        record: record,
+      ),
     );
   }
 
-  // ─────────────────────────────────────────────
-  // Standard record card
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // Standard card
+  // ---------------------------------------------------------------------------
 
   Widget _buildRecordCard({
     required IconData icon,
@@ -1668,143 +1678,124 @@ class _MedicalRecordScreenState
   }) {
     return Container(
       margin:
-          const EdgeInsets.only(
-        bottom: 10,
-      ),
-      decoration:
-          BoxDecoration(
+          const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
         color: Appcolors.surface,
         borderRadius:
-            BorderRadius.circular(
-          16,
-        ),
+            BorderRadius.circular(16),
         border: Border.all(
           color: Appcolors.border,
         ),
       ),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding:
-            const EdgeInsets
-                .symmetric(
-          horizontal: 16,
-          vertical: 6,
-        ),
-        leading: Container(
-          height: 44,
-          width: 44,
-          decoration:
-              BoxDecoration(
-            color: Appcolors
-                .primary
-                .withValues(
-              alpha: 0.1,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius:
+            BorderRadius.circular(16),
+        child: ListTile(
+          onTap: onTap,
+          contentPadding:
+              const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 6,
+          ),
+          leading: Container(
+            height: 44,
+            width: 44,
+            decoration: BoxDecoration(
+              color: Appcolors.primary
+                  .withValues(
+                alpha: 0.1,
+              ),
+              borderRadius:
+                  BorderRadius.circular(12),
             ),
-            borderRadius:
-                BorderRadius.circular(
-              12,
+            child: Icon(
+              icon,
+              color: Appcolors.primary,
             ),
           ),
-          child: Icon(
-            icon,
-            color:
-                Appcolors.primary,
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color:
+                  Appcolors.primaryText,
+            ),
           ),
+          subtitle: subtitle.isNotEmpty
+              ? Padding(
+                  padding:
+                      const EdgeInsets.only(
+                    top: 4,
+                  ),
+                  child: Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow:
+                        TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(
+                      fontSize: 13,
+                      color: Appcolors
+                          .secondaryText,
+                    ),
+                  ),
+                )
+              : null,
+          trailing: trailing != null
+              ? _buildStatusBadge(trailing)
+              : onTap != null
+                  ? const Icon(
+                      Icons.chevron_right,
+                      color: Appcolors
+                          .secondaryText,
+                    )
+                  : null,
         ),
-        title: Text(
-          title,
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.w600,
-            color:
-                Appcolors.primaryText,
-          ),
-        ),
-        subtitle:
-            subtitle.isNotEmpty
-                ? Padding(
-                    padding:
-                        const EdgeInsets
-                            .only(
-                      top: 4,
-                    ),
-                    child: Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow:
-                          TextOverflow
-                              .ellipsis,
-                      style:
-                          const TextStyle(
-                        fontSize: 13,
-                        color: Appcolors
-                            .secondaryText,
-                      ),
-                    ),
-                  )
-                : null,
-        trailing:
-            trailing != null
-                ? Container(
-                    padding:
-                        const EdgeInsets
-                            .symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration:
-                        BoxDecoration(
-                      color: trailing
-                                  .toLowerCase() ==
-                              'active'
-                          ? Appcolors
-                              .success
-                              .withValues(
-                              alpha: 0.1,
-                            )
-                          : Appcolors
-                              .secondaryText
-                              .withValues(
-                              alpha: 0.1,
-                            ),
-                      borderRadius:
-                          BorderRadius
-                              .circular(
-                        20,
-                      ),
-                    ),
-                    child: Text(
-                      trailing,
-                      style:
-                          TextStyle(
-                        fontSize: 12,
-                        fontWeight:
-                            FontWeight.w600,
-                        color: trailing
-                                    .toLowerCase() ==
-                                'active'
-                            ? Appcolors
-                                .success
-                            : Appcolors
-                                .secondaryText,
-                      ),
-                    ),
-                  )
-                : onTap != null
-                    ? const Icon(
-                        Icons.chevron_right,
-                        color: Appcolors
-                            .secondaryText,
-                      )
-                    : null,
       ),
     );
   }
 
-  // ─────────────────────────────────────────────
+  Widget _buildStatusBadge(
+    String status,
+  ) {
+    final isActive =
+        status.toLowerCase() == 'active';
+
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: isActive
+            ? Appcolors.success.withValues(
+                alpha: 0.1,
+              )
+            : Appcolors.secondaryText
+                .withValues(
+                alpha: 0.1,
+              ),
+        borderRadius:
+            BorderRadius.circular(20),
+      ),
+      child: Text(
+        status,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: isActive
+              ? Appcolors.success
+              : Appcolors.secondaryText,
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Empty state
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   Widget _buildEmptyState({
     required String title,
@@ -1813,16 +1804,11 @@ class _MedicalRecordScreenState
   }) {
     return Container(
       padding:
-          const EdgeInsets.all(
-        30,
-      ),
-      decoration:
-          BoxDecoration(
+          const EdgeInsets.all(30),
+      decoration: BoxDecoration(
         color: Appcolors.surface,
         borderRadius:
-            BorderRadius.circular(
-          20,
-        ),
+            BorderRadius.circular(20),
         border: Border.all(
           color: Appcolors.border,
         ),
@@ -1832,10 +1818,8 @@ class _MedicalRecordScreenState
           Container(
             height: 72,
             width: 72,
-            decoration:
-                BoxDecoration(
-              color: Appcolors
-                  .primary
+            decoration: BoxDecoration(
+              color: Appcolors.primary
                   .withValues(
                 alpha: 0.1,
               ),
@@ -1844,35 +1828,25 @@ class _MedicalRecordScreenState
             child: Icon(
               icon,
               size: 34,
-              color:
-                  Appcolors.primary,
+              color: Appcolors.primary,
             ),
           ),
-          const SizedBox(
-            height: 18,
-          ),
+          const SizedBox(height: 18),
           Text(
             title,
-            textAlign:
-                TextAlign.center,
-            style:
-                const TextStyle(
+            textAlign: TextAlign.center,
+            style: const TextStyle(
               fontSize: 18,
-              fontWeight:
-                  FontWeight.bold,
+              fontWeight: FontWeight.bold,
               color:
                   Appcolors.primaryText,
             ),
           ),
-          const SizedBox(
-            height: 8,
-          ),
+          const SizedBox(height: 8),
           Text(
             message,
-            textAlign:
-                TextAlign.center,
-            style:
-                const TextStyle(
+            textAlign: TextAlign.center,
+            style: const TextStyle(
               fontSize: 14,
               color:
                   Appcolors.secondaryText,
@@ -1884,17 +1858,15 @@ class _MedicalRecordScreenState
     );
   }
 
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
   // Error state
-  // ─────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
 
   Widget _buildErrorState() {
     return Center(
       child: Padding(
         padding:
-            const EdgeInsets.all(
-          24,
-        ),
+            const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment:
               MainAxisAlignment.center,
@@ -1902,18 +1874,13 @@ class _MedicalRecordScreenState
             const Icon(
               Icons.error_outline,
               size: 60,
-              color:
-                  Appcolors.error,
+              color: Appcolors.error,
             ),
-            const SizedBox(
-              height: 16,
-            ),
+            const SizedBox(height: 16),
             const Text(
               'Could not load medical records',
-              textAlign:
-                  TextAlign.center,
-              style:
-                  TextStyle(
+              textAlign: TextAlign.center,
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight:
                     FontWeight.bold,
@@ -1921,23 +1888,17 @@ class _MedicalRecordScreenState
                     Appcolors.primaryText,
               ),
             ),
-            const SizedBox(
-              height: 8,
-            ),
+            const SizedBox(height: 8),
             Text(
               _errorMessage ??
                   'Something went wrong.',
-              textAlign:
-                  TextAlign.center,
-              style:
-                  const TextStyle(
-                color: Appcolors
-                    .secondaryText,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color:
+                    Appcolors.secondaryText,
               ),
             ),
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
             ElevatedButton(
               onPressed:
                   _loadMedicalRecords,
@@ -1949,9 +1910,7 @@ class _MedicalRecordScreenState
                     Colors.white,
               ),
               child:
-                  const Text(
-                'Try Again',
-              ),
+                  const Text('Try Again'),
             ),
           ],
         ),

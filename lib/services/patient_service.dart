@@ -237,4 +237,32 @@ Future<Map<String, dynamic>> getPatientDocuments(
         'Failed to load patient documents',
   );
 }
+Future<Map<String, dynamic>> getLabReports(
+  String patientId,
+) async {
+  final token = await _authStorage.getAccessToken();
+
+  if (token == null) {
+    throw Exception('No access token found.');
+  }
+
+  final response = await _apiService.get(
+    '/patients/$patientId/lab-reports',
+    token: token,
+  );
+
+  print('LAB REPORTS STATUS: ${response.statusCode}');
+  print('LAB REPORTS RESPONSE: ${response.body}');
+
+  final data = jsonDecode(response.body);
+
+  if (response.statusCode == 200) {
+    return Map<String, dynamic>.from(data);
+  }
+
+  throw Exception(
+    data['error']?['message'] ??
+        'Failed to load lab reports',
+  );
+}
 }

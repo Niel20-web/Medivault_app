@@ -17,6 +17,7 @@ dependencies:
   http: ^1.6.0
   qr_flutter: ^4.1.0
   pdfrx: ^2.6.5
+  public_file_saver: ^1.2.0
 
 dev_dependencies:
   flutter_test:

@@ -28,157 +28,117 @@ class _MedicalTimelineScreenState
     _loadTimeline();
   }
 
+  // ===========================================================================
+  // LOAD TIMELINE
+  // ===========================================================================
+
   Future<void> _loadTimeline() async {
-    try {
+    if (mounted) {
       setState(() {
         _isLoading = true;
         _error = null;
       });
+    }
 
-      // ------------------------------------------------------------
-      // 1. Get logged-in patient's profile
-      // ------------------------------------------------------------
+    try {
+      // -----------------------------------------------------------------------
+      // 1. Get the currently logged-in patient
+      // -----------------------------------------------------------------------
+
       final patientResponse =
           await _patientService.getMyPatientProfile();
 
-      final patientData = patientResponse['data'];
+      final patient = _unwrapResponse(
+        patientResponse,
+      );
 
-      if (patientData == null) {
-        throw Exception(
-          'Patient data was not returned by the server.',
-        );
-      }
+      // IMPORTANT:
+      // The history endpoint expects the backend UUID (_id).
+      // Do not use profileId or MV-2026-xxxxx here.
+      final patientId = patient['_id']?.toString();
 
-      final patient =
-          Map<String, dynamic>.from(patientData);
-
-      final patientId =
-          patient['_id']?.toString() ??
-          patient['patientId']?.toString();
-
-      if (patientId == null || patientId.isEmpty) {
+      if (patientId == null || patientId.trim().isEmpty) {
         throw Exception(
           'Patient ID was not found.',
         );
       }
 
-      // ------------------------------------------------------------
+      // -----------------------------------------------------------------------
       // 2. Get complete medical history
-      // ------------------------------------------------------------
+      // -----------------------------------------------------------------------
+
       final historyResponse =
           await _patientService.getMedicalHistory(
         patientId,
       );
 
-      // Backend returns the grouped history directly:
-      //
-      // {
-      //   encounters: [],
-      //   diagnoses: [],
-      //   vitals: [],
-      //   clinicalNotes: [],
-      //   prescriptions: [],
-      //   labReports: [],
-      //   imagingReports: [],
-      //   vaccinations: [],
-      //   procedures: []
-      // }
-      //
-      // We also support a possible { data: {...} } wrapper.
-
       final historyData =
-          historyResponse['data'] is Map
-              ? Map<String, dynamic>.from(
-                  historyResponse['data'],
-                )
-              : historyResponse;
+          _unwrapResponse(historyResponse);
 
       final events = <_TimelineEvent>[];
 
-      // ------------------------------------------------------------
-      // Diagnoses
-      // ------------------------------------------------------------
+      // -----------------------------------------------------------------------
+      // 3. Add all supported history categories
+      // -----------------------------------------------------------------------
+
       _addEvents(
         events,
         historyData['diagnoses'],
         type: 'diagnosis',
       );
 
-      // ------------------------------------------------------------
-      // Vitals
-      // ------------------------------------------------------------
       _addEvents(
         events,
         historyData['vitals'],
         type: 'vitals',
       );
 
-      // ------------------------------------------------------------
-      // Encounters
-      // ------------------------------------------------------------
       _addEvents(
         events,
         historyData['encounters'],
         type: 'encounter',
       );
 
-      // ------------------------------------------------------------
-      // Clinical notes
-      // ------------------------------------------------------------
       _addEvents(
         events,
         historyData['clinicalNotes'],
         type: 'clinical_note',
       );
 
-      // ------------------------------------------------------------
-      // Prescriptions
-      // ------------------------------------------------------------
       _addEvents(
         events,
         historyData['prescriptions'],
         type: 'prescription',
       );
 
-      // ------------------------------------------------------------
-      // Lab reports
-      // ------------------------------------------------------------
       _addEvents(
         events,
         historyData['labReports'],
         type: 'lab_report',
       );
 
-      // ------------------------------------------------------------
-      // Imaging
-      // ------------------------------------------------------------
       _addEvents(
         events,
         historyData['imagingReports'],
         type: 'imaging',
       );
 
-      // ------------------------------------------------------------
-      // Vaccinations
-      // ------------------------------------------------------------
       _addEvents(
         events,
         historyData['vaccinations'],
         type: 'vaccination',
       );
 
-      // ------------------------------------------------------------
-      // Procedures
-      // ------------------------------------------------------------
       _addEvents(
         events,
         historyData['procedures'],
         type: 'procedure',
       );
 
-      // ------------------------------------------------------------
-      // Sort newest → oldest
-      // ------------------------------------------------------------
+      // -----------------------------------------------------------------------
+      // 4. Newest → oldest
+      // -----------------------------------------------------------------------
+
       events.sort(
         (a, b) => b.date.compareTo(a.date),
       );
@@ -190,17 +150,67 @@ class _MedicalTimelineScreenState
         _isLoading = false;
       });
     } catch (e) {
-      print('MEDICAL TIMELINE ERROR: $e');
+      debugPrint(
+        'MEDICAL TIMELINE ERROR: $e',
+      );
 
       if (!mounted) return;
 
       setState(() {
         _isLoading = false;
+        _events = [];
         _error =
             'Failed to load your medical timeline.';
       });
     }
   }
+
+  // ===========================================================================
+  // RESPONSE HELPERS
+  // ===========================================================================
+
+  Map<String, dynamic> _unwrapResponse(
+    Map<String, dynamic> response,
+  ) {
+    final dynamic data = response['data'];
+
+    if (data is Map) {
+      return Map<String, dynamic>.from(data);
+    }
+
+    return response;
+  }
+
+  Map<String, dynamic> _recordData(
+    Map<String, dynamic> record,
+  ) {
+    final dynamic nestedData = record['data'];
+
+    if (nestedData is Map) {
+      return {
+        ...record,
+        ...Map<String, dynamic>.from(nestedData),
+      };
+    }
+
+    return record;
+  }
+
+  String? _stringValue(
+    dynamic value,
+  ) {
+    if (value == null) return null;
+
+    final text = value.toString().trim();
+
+    if (text.isEmpty) return null;
+
+    return text;
+  }
+
+  // ===========================================================================
+  // ADD EVENTS
+  // ===========================================================================
 
   void _addEvents(
     List<_TimelineEvent> events,
@@ -244,16 +254,15 @@ class _MedicalTimelineScreenState
     }
   }
 
+  // ===========================================================================
+  // DATE HANDLING
+  // ===========================================================================
+
   DateTime? _extractDate(
     Map<String, dynamic> record,
     String type,
   ) {
-    final data =
-        record['data'] is Map
-            ? Map<String, dynamic>.from(
-                record['data'],
-              )
-            : record;
+    final data = _recordData(record);
 
     final possibleDates = <dynamic>[];
 
@@ -262,7 +271,9 @@ class _MedicalTimelineScreenState
         possibleDates.addAll([
           data['diagnosedAt'],
           data['diagnosisDate'],
+          data['date'],
           record['createdAt'],
+          record['updatedAt'],
         ]);
         break;
 
@@ -270,22 +281,31 @@ class _MedicalTimelineScreenState
         possibleDates.addAll([
           data['recordedAt'],
           data['measuredAt'],
+          data['recordedDate'],
+          data['date'],
           record['createdAt'],
+          record['updatedAt'],
         ]);
         break;
 
       case 'encounter':
         possibleDates.addAll([
           data['encounterDate'],
+          data['visitDate'],
           data['date'],
+          data['startedAt'],
           record['createdAt'],
+          record['updatedAt'],
         ]);
         break;
 
       case 'clinical_note':
         possibleDates.addAll([
           data['createdAt'],
+          data['noteDate'],
+          data['date'],
           record['createdAt'],
+          record['updatedAt'],
         ]);
         break;
 
@@ -293,22 +313,33 @@ class _MedicalTimelineScreenState
         possibleDates.addAll([
           data['prescribedAt'],
           data['startDate'],
+          data['prescriptionDate'],
+          data['date'],
           record['createdAt'],
+          record['updatedAt'],
         ]);
         break;
 
       case 'lab_report':
         possibleDates.addAll([
           data['reportDate'],
+          data['resultedAt'],
           data['reportedAt'],
+          data['date'],
+          data['collectedAt'],
           record['createdAt'],
+          record['updatedAt'],
         ]);
         break;
 
       case 'imaging':
         possibleDates.addAll([
           data['reportDate'],
+          data['performedAt'],
+          data['performedDate'],
+          data['date'],
           record['createdAt'],
+          record['updatedAt'],
         ]);
         break;
 
@@ -316,7 +347,10 @@ class _MedicalTimelineScreenState
         possibleDates.addAll([
           data['administeredAt'],
           data['administeredDate'],
+          data['vaccinationDate'],
+          data['date'],
           record['createdAt'],
+          record['updatedAt'],
         ]);
         break;
 
@@ -324,7 +358,10 @@ class _MedicalTimelineScreenState
         possibleDates.addAll([
           data['performedAt'],
           data['performedDate'],
+          data['procedureDate'],
+          data['date'],
           record['createdAt'],
+          record['updatedAt'],
         ]);
         break;
     }
@@ -344,31 +381,55 @@ class _MedicalTimelineScreenState
     return null;
   }
 
+  // ===========================================================================
+  // DISPLAY DATA
+  // ===========================================================================
+
   _TimelineDisplayData _buildDisplayData(
     Map<String, dynamic> record,
     String type,
   ) {
-    final data =
-        record['data'] is Map
-            ? Map<String, dynamic>.from(
-                record['data'],
-              )
-            : record;
+    final data = _recordData(record);
 
     switch (type) {
+      // -----------------------------------------------------------------------
+      // DIAGNOSIS
+      // -----------------------------------------------------------------------
+
       case 'diagnosis':
         final diagnosisName =
-            data['diagnosisName']?.toString() ??
-                data['name']?.toString() ??
-                data['diagnosis']?.toString() ??
+            _stringValue(
+                  data['diagnosisName'],
+                ) ??
+                _stringValue(
+                  data['diagnosis'],
+                ) ??
+                _stringValue(
+                  data['name'],
+                ) ??
+                _stringValue(
+                  data['condition'],
+                ) ??
+                _stringValue(
+                  data['title'],
+                ) ??
                 'Diagnosis';
 
         final code =
-            data['diagnosisCode']?.toString() ??
-                data['icdCode']?.toString();
+            _stringValue(
+                  data['diagnosisCode'],
+                ) ??
+                _stringValue(
+                  data['icdCode'],
+                ) ??
+                _stringValue(
+                  data['code'],
+                );
 
         final status =
-            data['status']?.toString();
+            _stringValue(
+              data['status'],
+            );
 
         return _TimelineDisplayData(
           icon: Icons.medical_services_outlined,
@@ -381,6 +442,10 @@ class _MedicalTimelineScreenState
               : 'Medical diagnosis recorded',
         );
 
+      // -----------------------------------------------------------------------
+      // VITALS
+      // -----------------------------------------------------------------------
+
       case 'vitals':
         final systolic =
             data['bloodPressureSystolic'];
@@ -388,40 +453,89 @@ class _MedicalTimelineScreenState
         final diastolic =
             data['bloodPressureDiastolic'];
 
+        final bloodPressure =
+            _stringValue(
+              data['bloodPressure'],
+            ) ??
+            _stringValue(
+              data['bp'],
+            );
+
         final heartRate =
-            data['heartRate'];
+            _stringValue(
+              data['heartRate'],
+            ) ??
+            _stringValue(
+              data['pulse'],
+            );
 
         final oxygen =
-            data['oxygenSaturation'];
+            _stringValue(
+              data['oxygenSaturation'],
+            ) ??
+            _stringValue(
+              data['spo2'],
+            ) ??
+            _stringValue(
+              data['oxygen'],
+            );
 
         final temperature =
-            data['temperature'];
+            _stringValue(
+              data['temperature'],
+            ) ??
+            _stringValue(
+              data['temp'],
+            );
 
-        final bp =
-            systolic != null && diastolic != null
-                ? 'Blood Pressure $systolic/$diastolic'
-                : null;
+        final weight =
+            _stringValue(
+              data['weight'],
+            );
 
-        final hr =
-            heartRate != null
-                ? 'Heart Rate $heartRate'
-                : null;
+        final height =
+            _stringValue(
+              data['height'],
+            );
 
-        final spo2 =
-            oxygen != null
-                ? 'SpO₂ $oxygen%'
-                : null;
+        String? bp;
 
-        final temp =
-            temperature != null
-                ? 'Temperature $temperature °C'
-                : null;
+        if (systolic != null &&
+            diastolic != null) {
+          bp =
+              'Blood Pressure $systolic/$diastolic';
+        } else if (bloodPressure != null) {
+          bp =
+              'Blood Pressure $bloodPressure';
+        }
+
+        final hr = heartRate != null
+            ? 'Heart Rate $heartRate'
+            : null;
+
+        final spo2 = oxygen != null
+            ? 'SpO₂ $oxygen%'
+            : null;
+
+        final temp = temperature != null
+            ? 'Temperature $temperature °C'
+            : null;
+
+        final weightText = weight != null
+            ? 'Weight $weight'
+            : null;
+
+        final heightText = height != null
+            ? 'Height $height'
+            : null;
 
         final values = [
           bp,
           hr,
           spo2,
           temp,
+          weightText,
+          heightText,
         ].whereType<String>().toList();
 
         return _TimelineDisplayData(
@@ -431,17 +545,36 @@ class _MedicalTimelineScreenState
               ? values.take(2).join(' • ')
               : 'Vital signs',
           details: values.length > 2
-              ? values.skip(2).join(' • ')
+              ? values.skip(2).take(3).join(' • ')
               : 'Vital signs recorded',
         );
 
+      // -----------------------------------------------------------------------
+      // ENCOUNTER
+      // -----------------------------------------------------------------------
+
       case 'encounter':
         final encounterType =
-            data['encounterType']?.toString() ??
-                data['type']?.toString();
+            _stringValue(
+                  data['encounterType'],
+                ) ??
+                _stringValue(
+                  data['type'],
+                ) ??
+                _stringValue(
+                  data['visitType'],
+                );
 
         final complaint =
-            data['chiefComplaint']?.toString();
+            _stringValue(
+              data['chiefComplaint'],
+            ) ??
+            _stringValue(
+              data['reason'],
+            ) ??
+            _stringValue(
+              data['complaint'],
+            );
 
         return _TimelineDisplayData(
           icon: Icons.local_hospital_outlined,
@@ -449,22 +582,40 @@ class _MedicalTimelineScreenState
           subtitle: encounterType != null
               ? _prettyText(encounterType)
               : 'Medical Encounter',
-          details: complaint != null &&
-                  complaint.isNotEmpty
+          details: complaint != null
               ? complaint
               : 'Medical encounter recorded',
         );
 
+      // -----------------------------------------------------------------------
+      // CLINICAL NOTE
+      // -----------------------------------------------------------------------
+
       case 'clinical_note':
         final title =
-            data['title']?.toString() ??
+            _stringValue(
+                  data['title'],
+                ) ??
+                _stringValue(
+                  data['noteTitle'],
+                ) ??
                 'Clinical Note';
 
         final noteType =
-            data['noteType']?.toString();
+            _stringValue(
+              data['noteType'],
+            );
 
         final content =
-            data['content']?.toString();
+            _stringValue(
+                  data['content'],
+                ) ??
+                _stringValue(
+                  data['note'],
+                ) ??
+                _stringValue(
+                  data['text'],
+                );
 
         return _TimelineDisplayData(
           icon: Icons.description_outlined,
@@ -472,28 +623,86 @@ class _MedicalTimelineScreenState
           subtitle: noteType != null
               ? _prettyText(noteType)
               : 'Clinical Note',
-          details: content != null &&
-                  content.isNotEmpty
+          details: content != null
               ? _shorten(content)
               : 'Clinical note recorded',
         );
 
+      // -----------------------------------------------------------------------
+      // PRESCRIPTION
+      // -----------------------------------------------------------------------
+
       case 'prescription':
         final medication =
-            data['medicationName']?.toString() ??
-                data['medicineName']?.toString() ??
+            _stringValue(
+                  data['medicationName'],
+                ) ??
+                _stringValue(
+                  data['medicineName'],
+                ) ??
+                _stringValue(
+                  data['name'],
+                ) ??
+                _stringValue(
+                  data['medicine'],
+                ) ??
+                _stringValue(
+                  data['drugName'],
+                ) ??
                 'Prescription';
 
         final dosage =
-            data['dosage']?.toString();
+            _stringValue(
+                  data['dosage'],
+                ) ??
+                _stringValue(
+                  data['dose'],
+                );
 
         final frequency =
-            data['frequency']?.toString();
+            _stringValue(
+                  data['frequency'],
+                ) ??
+                _stringValue(
+                  data['doseFrequency'],
+                ) ??
+                _stringValue(
+                  data['schedule'],
+                );
+
+        final duration =
+            _stringValue(
+                  data['duration'],
+                ) ??
+                _stringValue(
+                  data['treatmentDuration'],
+                );
+
+        final status =
+            _stringValue(
+                  data['status'],
+                ) ??
+                _stringValue(
+                  data['prescriptionStatus'],
+                );
 
         final parts = [
           dosage,
           frequency,
         ].whereType<String>().toList();
+
+        String details =
+            'Medication prescribed';
+
+        if (duration != null) {
+          details =
+              'Duration: $duration';
+        }
+
+        if (status != null) {
+          details =
+              '${_prettyText(status)}${duration != null ? ' • $duration' : ''}';
+        }
 
         return _TimelineDisplayData(
           icon: Icons.medication_outlined,
@@ -501,19 +710,52 @@ class _MedicalTimelineScreenState
           subtitle: parts.isNotEmpty
               ? parts.join(' • ')
               : 'Prescription',
-          details: 'Medication prescribed',
+          details: details,
         );
+
+      // -----------------------------------------------------------------------
+      // LAB REPORT
+      // -----------------------------------------------------------------------
 
       case 'lab_report':
         final testName =
-            data['testName']?.toString() ??
+            _stringValue(
+                  data['testName'],
+                ) ??
+                _stringValue(
+                  data['name'],
+                ) ??
                 'Laboratory Test';
 
         final status =
-            data['status']?.toString();
+            _stringValue(
+                  data['status'],
+                ) ??
+                _stringValue(
+                  data['resultStatus'],
+                );
+
+        final result =
+            _stringValue(
+                  data['results'],
+                ) ??
+                _stringValue(
+                  data['result'],
+                );
 
         final interpretation =
-            data['interpretation']?.toString();
+            _stringValue(
+              data['interpretation'],
+            );
+
+        String details =
+            'Laboratory report recorded';
+
+        if (interpretation != null) {
+          details = interpretation;
+        } else if (result != null) {
+          details = 'Result: $result';
+        }
 
         return _TimelineDisplayData(
           icon: Icons.science_outlined,
@@ -521,22 +763,38 @@ class _MedicalTimelineScreenState
           subtitle: status != null
               ? 'Lab Report • ${_prettyText(status)}'
               : 'Lab Report',
-          details: interpretation != null &&
-                  interpretation.isNotEmpty
-              ? interpretation
-              : 'Laboratory report recorded',
+          details: details,
         );
+
+      // -----------------------------------------------------------------------
+      // IMAGING
+      // -----------------------------------------------------------------------
 
       case 'imaging':
         final imagingType =
-            data['imagingType']?.toString() ??
+            _stringValue(
+                  data['imagingType'],
+                ) ??
+                _stringValue(
+                  data['type'],
+                ) ??
+                _stringValue(
+                  data['modality'],
+                ) ??
                 'Imaging Report';
 
         final bodyPart =
-            data['bodyPart']?.toString();
+            _stringValue(
+              data['bodyPart'],
+            );
 
         final impression =
-            data['impression']?.toString();
+            _stringValue(
+                  data['impression'],
+                ) ??
+                _stringValue(
+                  data['findings'],
+                );
 
         return _TimelineDisplayData(
           icon: Icons.image_outlined,
@@ -544,19 +802,45 @@ class _MedicalTimelineScreenState
           subtitle: bodyPart != null
               ? 'Imaging • $bodyPart'
               : 'Imaging Report',
-          details: impression != null &&
-                  impression.isNotEmpty
-              ? impression
+          details: impression != null
+              ? _shorten(impression)
               : 'Medical imaging document',
         );
 
+      // -----------------------------------------------------------------------
+      // VACCINATION
+      // -----------------------------------------------------------------------
+
       case 'vaccination':
         final vaccine =
-            data['vaccineName']?.toString() ??
+            _stringValue(
+                  data['vaccineName'],
+                ) ??
+                _stringValue(
+                  data['vaccine'],
+                ) ??
+                _stringValue(
+                  data['name'],
+                ) ??
                 'Vaccination';
 
         final dose =
-            data['dose']?.toString();
+            _stringValue(
+              data['dose'],
+            );
+
+        final manufacturer =
+            _stringValue(
+              data['manufacturer'],
+            );
+
+        String details =
+            'Vaccination recorded';
+
+        if (manufacturer != null) {
+          details =
+              'Manufacturer: $manufacturer';
+        }
 
         return _TimelineDisplayData(
           icon: Icons.vaccines_outlined,
@@ -564,19 +848,38 @@ class _MedicalTimelineScreenState
           subtitle: dose != null
               ? 'Vaccination • Dose $dose'
               : 'Vaccination',
-          details: 'Vaccination recorded',
+          details: details,
         );
+
+      // -----------------------------------------------------------------------
+      // PROCEDURE
+      // -----------------------------------------------------------------------
 
       case 'procedure':
         final procedure =
-            data['procedureName']?.toString() ??
+            _stringValue(
+                  data['procedureName'],
+                ) ??
+                _stringValue(
+                  data['name'],
+                ) ??
+                _stringValue(
+                  data['procedure'],
+                ) ??
                 'Medical Procedure';
 
         final status =
-            data['status']?.toString();
+            _stringValue(
+              data['status'],
+            );
 
         final outcome =
-            data['outcome']?.toString();
+            _stringValue(
+                  data['outcome'],
+                ) ??
+                _stringValue(
+                  data['result'],
+                );
 
         return _TimelineDisplayData(
           icon: Icons.healing_outlined,
@@ -584,14 +887,13 @@ class _MedicalTimelineScreenState
           subtitle: status != null
               ? 'Procedure • ${_prettyText(status)}'
               : 'Procedure',
-          details: outcome != null &&
-                  outcome.isNotEmpty
-              ? outcome
+          details: outcome != null
+              ? _shorten(outcome)
               : 'Medical procedure recorded',
         );
     }
 
-    return _TimelineDisplayData(
+    return const _TimelineDisplayData(
       icon: Icons.medical_information_outlined,
       title: 'Medical Record',
       subtitle: 'Medical Event',
@@ -599,23 +901,35 @@ class _MedicalTimelineScreenState
     );
   }
 
-  String _prettyText(String value) {
+  // ===========================================================================
+  // TEXT HELPERS
+  // ===========================================================================
+
+  String _prettyText(
+    String value,
+  ) {
     return value
         .replaceAll('_', ' ')
-        .split(' ')
+        .replaceAll('-', ' ')
+        .split(RegExp(r'\s+'))
         .map(
           (word) => word.isEmpty
               ? word
-              : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}',
+              : '${word[0].toUpperCase()}'
+                  '${word.substring(1).toLowerCase()}',
         )
         .join(' ');
   }
 
-  String _shorten(String value) {
-    final clean = value.replaceAll(
-      RegExp(r'\s+'),
-      ' ',
-    );
+  String _shorten(
+    String value,
+  ) {
+    final clean = value
+        .replaceAll(
+          RegExp(r'\s+'),
+          ' ',
+        )
+        .trim();
 
     if (clean.length <= 90) {
       return clean;
@@ -624,7 +938,9 @@ class _MedicalTimelineScreenState
     return '${clean.substring(0, 87)}...';
   }
 
-  String _formatDate(DateTime date) {
+  String _formatDate(
+    DateTime date,
+  ) {
     const months = [
       'January',
       'February',
@@ -640,11 +956,29 @@ class _MedicalTimelineScreenState
       'December',
     ];
 
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
+    return '${date.day} '
+        '${months[date.month - 1]} '
+        '${date.year}';
   }
 
+  DateTime _dateOnly(
+    DateTime date,
+  ) {
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+    );
+  }
+
+  // ===========================================================================
+  // BUILD
+  // ===========================================================================
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       backgroundColor: Appcolors.background,
       body: SafeArea(
@@ -655,115 +989,27 @@ class _MedicalTimelineScreenState
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
+      return Center(
+        child: CircularProgressIndicator(
+          color: Appcolors.primary,
+        ),
       );
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  color:
-                      Appcolors.primary.withValues(
-                    alpha: 0.10,
-                  ),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.timeline_outlined,
-                  color: Appcolors.primary,
-                  size: 34,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'Could not load timeline',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Appcolors.primaryText,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Appcolors.secondaryText,
-                ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _loadTimeline,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Appcolors.primary,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Try Again'),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildErrorState();
     }
 
     if (_events.isEmpty) {
-      return RefreshIndicator(
-        onRefresh: _loadTimeline,
-        child: ListView(
-          physics:
-              const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(
-            20,
-            24,
-            20,
-            30,
-          ),
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 70),
-            Icon(
-              Icons.timeline_outlined,
-              size: 64,
-              color: Appcolors.secondaryText
-                  .withValues(alpha: 0.4),
-            ),
-            const SizedBox(height: 18),
-            Text(
-              'No medical history yet',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Appcolors.primaryText,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Your medical events will appear here when they are recorded.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                color: Appcolors.secondaryText,
-              ),
-            ),
-          ],
-        ),
-      );
+      return _buildEmptyState();
     }
 
     return RefreshIndicator(
+      color: Appcolors.primary,
       onRefresh: _loadTimeline,
       child: ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(
           20,
           24,
@@ -778,6 +1024,121 @@ class _MedicalTimelineScreenState
       ),
     );
   }
+
+  // ===========================================================================
+  // ERROR STATE
+  // ===========================================================================
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                color:
+                    Appcolors.primary.withValues(
+                  alpha: 0.10,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.timeline_outlined,
+                color: Appcolors.primary,
+                size: 34,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Could not load timeline',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Appcolors.primaryText,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Appcolors.secondaryText,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _loadTimeline,
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    Appcolors.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Try Again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // EMPTY STATE
+  // ===========================================================================
+
+  Widget _buildEmptyState() {
+    return RefreshIndicator(
+      color: Appcolors.primary,
+      onRefresh: _loadTimeline,
+      child: ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          20,
+          24,
+          20,
+          30,
+        ),
+        children: [
+          _buildHeader(),
+          const SizedBox(height: 70),
+          Icon(
+            Icons.timeline_outlined,
+            size: 64,
+            color: Appcolors.secondaryText
+                .withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'No medical history yet',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Appcolors.primaryText,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your medical events will appear here when they are recorded.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: Appcolors.secondaryText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // HEADER
+  // ===========================================================================
 
   Widget _buildHeader() {
     return Column(
@@ -804,19 +1165,24 @@ class _MedicalTimelineScreenState
     );
   }
 
+  // ===========================================================================
+  // GROUPED TIMELINE
+  // ===========================================================================
+
   List<Widget> _buildGroupedTimeline() {
     final widgets = <Widget>[];
 
     DateTime? currentDate;
 
-    for (int i = 0; i < _events.length; i++) {
+    for (
+      int i = 0;
+      i < _events.length;
+      i++
+    ) {
       final event = _events[i];
 
-      final eventDate = DateTime(
-        event.date.year,
-        event.date.month,
-        event.date.day,
-      );
+      final eventDate =
+          _dateOnly(event.date);
 
       final isNewDate =
           currentDate == null ||
@@ -842,9 +1208,11 @@ class _MedicalTimelineScreenState
         currentDate = eventDate;
       }
 
-      final isLast =
+      final bool isLast =
           i == _events.length - 1 ||
-          _dateOnly(_events[i + 1].date) !=
+          _dateOnly(
+                _events[i + 1].date,
+              ) !=
               _dateOnly(event.date);
 
       widgets.add(
@@ -859,15 +1227,13 @@ class _MedicalTimelineScreenState
     return widgets;
   }
 
-  DateTime _dateOnly(DateTime date) {
-    return DateTime(
-      date.year,
-      date.month,
-      date.day,
-    );
-  }
+  // ===========================================================================
+  // DATE HEADER
+  // ===========================================================================
 
-  Widget _buildDateHeader(String date) {
+  Widget _buildDateHeader(
+    String date,
+  ) {
     return Row(
       children: [
         Container(
@@ -891,20 +1257,27 @@ class _MedicalTimelineScreenState
     );
   }
 
+  // ===========================================================================
+  // TIMELINE ITEM
+  // ===========================================================================
+
   Widget _buildTimelineItem({
     required BuildContext context,
     required _TimelineEvent event,
     required bool isLast,
   }) {
     final canOpenDetails =
-        event.type == 'diagnosis' ||
-        event.type == 'vitals';
+        _canOpenDetails(event.type);
 
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment:
             CrossAxisAlignment.stretch,
         children: [
+          // -------------------------------------------------------------------
+          // Timeline line
+          // -------------------------------------------------------------------
+
           SizedBox(
             width: 10,
             child: Column(
@@ -938,106 +1311,123 @@ class _MedicalTimelineScreenState
               ],
             ),
           ),
+
           const SizedBox(width: 14),
+
+          // -------------------------------------------------------------------
+          // Event card
+          // -------------------------------------------------------------------
+
           Expanded(
-            child: GestureDetector(
-              onTap: canOpenDetails
-                  ? () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              MedicalRecordDetailScreen(
-                            type: event.type,
-                            record: event.record,
-                          ),
-                        ),
-                      );
-                    }
-                  : null,
-              child: Container(
-                margin: const EdgeInsets.only(
-                  bottom: 14,
-                ),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Appcolors.surface,
+            child: Container(
+              margin: const EdgeInsets.only(
+                bottom: 14,
+              ),
+              child: Material(
+                color: Appcolors.surface,
+                borderRadius:
+                    BorderRadius.circular(18),
+                child: InkWell(
                   borderRadius:
                       BorderRadius.circular(18),
-                  border: Border.all(
-                    color: Appcolors.border,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color:
-                            Appcolors.primary.withValues(
-                          alpha: 0.1,
+                  onTap: canOpenDetails
+                      ? () =>
+                          _openDetails(event)
+                      : null,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          BorderRadius.circular(18),
+                      border: Border.all(
+                        color: Appcolors.border,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration:
+                              BoxDecoration(
+                            color: Appcolors.primary
+                                .withValues(
+                              alpha: 0.10,
+                            ),
+                            borderRadius:
+                                BorderRadius
+                                    .circular(12),
+                          ),
+                          child: Icon(
+                            event.icon,
+                            color:
+                                Appcolors.primary,
+                            size: 22,
+                          ),
                         ),
-                        borderRadius:
-                            BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        event.icon,
-                        color: Appcolors.primary,
-                        size: 22,
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment
+                                    .start,
+                            children: [
+                              Text(
+                                event.title,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight:
+                                      FontWeight
+                                          .bold,
+                                  color: Appcolors
+                                      .primaryText,
+                                ),
+                              ),
+                              const SizedBox(
+                                height: 4,
+                              ),
+                              Text(
+                                event.subtitle,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight:
+                                      FontWeight
+                                          .w600,
+                                  color: Appcolors
+                                      .primary,
+                                ),
+                              ),
+                              const SizedBox(
+                                height: 4,
+                              ),
+                              Text(
+                                event.details,
+                                maxLines: 2,
+                                overflow:
+                                    TextOverflow
+                                        .ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Appcolors
+                                      .secondaryText,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (canOpenDetails)
+                          const SizedBox(width: 6),
+                        if (canOpenDetails)
+                          Icon(
+                            Icons.chevron_right,
+                            color: Appcolors
+                                .secondaryText,
+                            size: 20,
+                          ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            event.title,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight:
-                                  FontWeight.bold,
-                              color:
-                                  Appcolors.primaryText,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            event.subtitle,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight:
-                                  FontWeight.w600,
-                              color:
-                                  Appcolors.primary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            event.details,
-                            maxLines: 2,
-                            overflow:
-                                TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color:
-                                  Appcolors.secondaryText,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    if (canOpenDetails)
-                      Icon(
-                        Icons.chevron_right,
-                        color:
-                            Appcolors.secondaryText,
-                        size: 20,
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1046,11 +1436,50 @@ class _MedicalTimelineScreenState
       ),
     );
   }
+
+  // ===========================================================================
+  // DETAIL NAVIGATION
+  // ===========================================================================
+
+  bool _canOpenDetails(
+    String type,
+  ) {
+    switch (type) {
+      case 'diagnosis':
+      case 'vitals':
+      case 'prescription':
+      case 'lab_report':
+      case 'encounter':
+      case 'clinical_note':
+      case 'imaging':
+      case 'vaccination':
+      case 'procedure':
+        return true;
+
+      default:
+        return false;
+    }
+  }
+
+  void _openDetails(
+    _TimelineEvent event,
+  ) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            MedicalRecordDetailScreen(
+          type: event.type,
+          record: event.record,
+        ),
+      ),
+    );
+  }
 }
 
-// -----------------------------------------------------------------------------
-// Timeline models
-// -----------------------------------------------------------------------------
+// =============================================================================
+// TIMELINE MODELS
+// =============================================================================
 
 class _TimelineEvent {
   final String type;

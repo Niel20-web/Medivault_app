@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdfrx/pdfrx.dart';
+import 'package:public_file_saver/public_file_saver.dart';
 
 import '../services/medical_record_service.dart';
 import '../services/patient_service.dart';
@@ -26,16 +27,27 @@ class DocumentViewerScreen extends StatefulWidget {
 class _DocumentViewerScreenState
     extends State<DocumentViewerScreen> {
   final PatientService _patientService = PatientService();
+
   final MedicalRecordService _medicalRecordService =
       MedicalRecordService();
+
   final AuthStorage _authStorage = AuthStorage();
 
+  final PublicFileSaver _fileSaver =
+      PublicFileSaver();
+
   String? _error;
+
   Uint8List? _documentBytes;
+
   Map<String, dynamic>? _metadata;
 
   bool _isLoading = true;
+
+  bool _isDownloading = false;
+
   bool _isPdf = false;
+
   String? _documentId;
 
   @override
@@ -43,6 +55,10 @@ class _DocumentViewerScreenState
     super.initState();
     _loadDocument();
   }
+
+  // ===========================================================================
+  // LOAD DOCUMENT
+  // ===========================================================================
 
   Future<void> _loadDocument() async {
     try {
@@ -62,7 +78,7 @@ class _DocumentViewerScreenState
       print('DOCUMENT ID: $documentId');
 
       if (documentId == null ||
-          documentId.toString().isEmpty) {
+          documentId.toString().trim().isEmpty) {
         throw Exception(
           'Document ID was not returned by the server.',
         );
@@ -75,27 +91,40 @@ class _DocumentViewerScreenState
       final patientResponse =
           await _patientService.getMyPatientProfile();
 
-      final patientData = patientResponse['data'];
+      Map<String, dynamic> patientData;
 
-      if (patientData == null) {
-        throw Exception(
-          'Patient data was not returned by the server.',
+      final rawPatientData =
+          patientResponse['data'];
+
+      if (rawPatientData is Map) {
+        patientData =
+            Map<String, dynamic>.from(
+          rawPatientData,
+        );
+      } else {
+        patientData =
+            Map<String, dynamic>.from(
+          patientResponse,
         );
       }
 
-      final patientId = patientData['_id'];
+      final patientId =
+          patientData['_id'];
 
       print('PATIENT ID: $patientId');
 
       if (patientId == null ||
-          patientId.toString().isEmpty) {
+          patientId.toString().trim().isEmpty) {
         throw Exception(
           'Patient UUID was not returned by the server.',
         );
       }
 
-      final patientIdString = patientId.toString();
-      final documentIdString = documentId.toString();
+      final patientIdString =
+          patientId.toString();
+
+      final documentIdString =
+          documentId.toString();
 
       // -----------------------------------------------------------------------
       // GET DOCUMENT METADATA
@@ -106,21 +135,25 @@ class _DocumentViewerScreenState
       );
 
       final metadataResponse =
-          await _medicalRecordService.getDocumentMetadata(
+          await _medicalRecordService
+              .getDocumentMetadata(
         patientId: patientIdString,
         documentId: documentIdString,
       );
 
       Map<String, dynamic> metadata;
 
-      final metadataData = metadataResponse['data'];
+      final metadataData =
+          metadataResponse['data'];
 
       if (metadataData is Map) {
-        metadata = Map<String, dynamic>.from(
+        metadata =
+            Map<String, dynamic>.from(
           metadataData,
         );
       } else {
-        metadata = Map<String, dynamic>.from(
+        metadata =
+            Map<String, dynamic>.from(
           metadataResponse,
         );
       }
@@ -138,7 +171,8 @@ class _DocumentViewerScreenState
       );
 
       final url =
-          await _medicalRecordService.getDocumentUrl(
+          await _medicalRecordService
+              .getDocumentUrl(
         patientId: patientIdString,
         documentId: documentIdString,
       );
@@ -147,7 +181,7 @@ class _DocumentViewerScreenState
         'DOCUMENT VIEW URL: $url',
       );
 
-      if (url.isEmpty) {
+      if (url.trim().isEmpty) {
         throw Exception(
           'The server returned an empty document URL.',
         );
@@ -160,7 +194,8 @@ class _DocumentViewerScreenState
       final token =
           await _authStorage.getAccessToken();
 
-      if (token == null || token.isEmpty) {
+      if (token == null ||
+          token.trim().isEmpty) {
         throw Exception(
           'No access token found.',
         );
@@ -209,6 +244,10 @@ class _DocumentViewerScreenState
         SessionManager.instance.handleSessionExpired(
           usedToken: token,
         );
+
+        throw Exception(
+          'Your session has expired. Please sign in again.',
+        );
       }
 
       if (response.statusCode != 200) {
@@ -218,7 +257,8 @@ class _DocumentViewerScreenState
         );
       }
 
-      final bytes = response.bodyBytes;
+      final bytes =
+          response.bodyBytes;
 
       if (bytes.isEmpty) {
         throw Exception(
@@ -231,17 +271,20 @@ class _DocumentViewerScreenState
       // -----------------------------------------------------------------------
 
       final contentType =
-          response.headers['content-type']?.toLowerCase() ??
+          response.headers['content-type']
+                  ?.toLowerCase() ??
               '';
 
       final isPdf =
-          contentType.contains('application/pdf') ||
+          contentType.contains(
+                'application/pdf',
+              ) ||
           (
             bytes.length >= 4 &&
-            bytes[0] == 0x25 && // %
-            bytes[1] == 0x50 && // P
-            bytes[2] == 0x44 && // D
-            bytes[3] == 0x46 // F
+            bytes[0] == 0x25 &&
+            bytes[1] == 0x50 &&
+            bytes[2] == 0x44 &&
+            bytes[3] == 0x46
           );
 
       final isImage =
@@ -296,11 +339,365 @@ class _DocumentViewerScreenState
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // IMAGE FORMAT DETECTION
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // DOWNLOAD DOCUMENT
+  // ===========================================================================
 
-  bool _looksLikeImage(Uint8List bytes) {
+  Future<void> _downloadDocument() async {
+    if (_documentBytes == null ||
+        _documentBytes!.isEmpty) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Document is not available for download.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    if (_isDownloading) {
+      return;
+    }
+
+    setState(() {
+      _isDownloading = true;
+    });
+
+    try {
+      // -----------------------------------------------------------------------
+      // GET FILE NAME
+      // -----------------------------------------------------------------------
+
+      String fileName =
+          _stringValue(
+        _metadata?['originalName'],
+      );
+
+      if (fileName.isEmpty) {
+        fileName =
+            _stringValue(
+          widget.document['originalName'],
+        );
+      }
+
+      if (fileName.isEmpty) {
+        fileName =
+            _stringValue(
+          _metadata?['fileName'],
+        );
+      }
+
+      if (fileName.isEmpty) {
+        fileName =
+            _isPdf
+                ? 'medical_document.pdf'
+                : 'medical_document';
+      }
+
+      fileName =
+          _sanitizeFileName(fileName);
+
+      // -----------------------------------------------------------------------
+      // MIME TYPE
+      // -----------------------------------------------------------------------
+
+      final mimeType =
+          _getMimeType();
+
+      // -----------------------------------------------------------------------
+      // ADD FILE EXTENSION IF NEEDED
+      // -----------------------------------------------------------------------
+
+      if (_isPdf) {
+        if (!fileName
+            .toLowerCase()
+            .endsWith('.pdf')) {
+          fileName =
+              '$fileName.pdf';
+        }
+      } else {
+        final lowerName =
+            fileName.toLowerCase();
+
+        final hasKnownImageExtension =
+            lowerName.endsWith('.jpg') ||
+            lowerName.endsWith('.jpeg') ||
+            lowerName.endsWith('.png') ||
+            lowerName.endsWith('.gif') ||
+            lowerName.endsWith('.webp');
+
+        if (!hasKnownImageExtension) {
+          fileName =
+              '$fileName'
+              '${_getImageExtension()}';
+        }
+      }
+
+      print(
+        '========== DOCUMENT SAVE START ==========',
+      );
+
+      print(
+        'SAVE FILE NAME: $fileName',
+      );
+
+      print(
+        'SAVE MIME TYPE: $mimeType',
+      );
+
+      print(
+        'SAVE FILE SIZE: '
+        '${_documentBytes!.length} bytes',
+      );
+
+      // -----------------------------------------------------------------------
+      // SAVE FILE
+      // -----------------------------------------------------------------------
+
+      final result =
+          await _fileSaver.saveBytes(
+        bytes: _documentBytes!,
+        fileName: fileName,
+        mimeType: mimeType,
+        subDir: 'MediVault',
+      );
+
+      print(
+        'SAVE RESULT: $result',
+      );
+
+      print(
+        'SAVE URI: ${result?.uri}',
+      );
+
+      print(
+        'SAVE PATH: ${result?.path}',
+      );
+
+      print(
+        '==========================================',
+      );
+
+      if (!mounted) return;
+
+      if (result != null &&
+          result.isSuccess) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
+          SnackBar(
+            content: Text(
+              'Document downloaded: '
+              '${result.fileName}',
+            ),
+            duration:
+                const Duration(
+              seconds: 4,
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Document download was cancelled or failed.',
+            ),
+          ),
+        );
+      }
+    } catch (e, stackTrace) {
+      print(
+        '========== DOCUMENT SAVE ERROR ==========',
+      );
+
+      print(
+        'SAVE ERROR: $e',
+      );
+
+      print(
+        'STACK TRACE: $stackTrace',
+      );
+
+      print(
+        '==========================================',
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        SnackBar(
+          content: Text(
+            'Unable to download document: $e',
+          ),
+          duration:
+              const Duration(
+            seconds: 4,
+          ),
+        ),
+      );
+    } finally {
+      if (!mounted) return;
+
+      setState(() {
+        _isDownloading = false;
+      });
+    }
+  }
+
+  // ===========================================================================
+  // MIME TYPE
+  // ===========================================================================
+
+  String _getMimeType() {
+    final metadataMimeType =
+        _stringValue(
+      _metadata?['mimeType'],
+    );
+
+    if (metadataMimeType.isNotEmpty) {
+      return metadataMimeType;
+    }
+
+    final metadataContentType =
+        _stringValue(
+      _metadata?['contentType'],
+    );
+
+    if (metadataContentType.isNotEmpty) {
+      return metadataContentType;
+    }
+
+    if (_isPdf) {
+      return 'application/pdf';
+    }
+
+    final originalName =
+        _stringValue(
+      _metadata?['originalName'],
+    ).toLowerCase();
+
+    if (originalName.endsWith('.png')) {
+      return 'image/png';
+    }
+
+    if (originalName.endsWith('.gif')) {
+      return 'image/gif';
+    }
+
+    if (originalName.endsWith('.webp')) {
+      return 'image/webp';
+    }
+
+    if (originalName.endsWith('.jpg') ||
+        originalName.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+
+    final widgetFileName =
+        _stringValue(
+      widget.document['originalName'],
+    ).toLowerCase();
+
+    if (widgetFileName.endsWith('.png')) {
+      return 'image/png';
+    }
+
+    if (widgetFileName.endsWith('.gif')) {
+      return 'image/gif';
+    }
+
+    if (widgetFileName.endsWith('.webp')) {
+      return 'image/webp';
+    }
+
+    if (widgetFileName.endsWith('.jpg') ||
+        widgetFileName.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+
+    return 'image/jpeg';
+  }
+
+  // ===========================================================================
+  // IMAGE EXTENSION
+  // ===========================================================================
+
+  String _getImageExtension() {
+    final mimeType =
+        _getMimeType().toLowerCase();
+
+    if (mimeType.contains('png')) {
+      return '.png';
+    }
+
+    if (mimeType.contains('gif')) {
+      return '.gif';
+    }
+
+    if (mimeType.contains('webp')) {
+      return '.webp';
+    }
+
+    return '.jpg';
+  }
+
+  // ===========================================================================
+  // SANITIZE FILE NAME
+  // ===========================================================================
+
+  String _sanitizeFileName(
+    String fileName,
+  ) {
+    var sanitized =
+        fileName.trim();
+
+    if (sanitized.isEmpty) {
+      return 'medical_document';
+    }
+
+    sanitized =
+        sanitized.replaceAll(
+      RegExp(
+        r'[\\/:*?"<>|]',
+      ),
+      '_',
+    );
+
+    sanitized =
+        sanitized.replaceFirst(
+      RegExp(
+        r'^[.\s]+',
+      ),
+      '',
+    );
+
+    sanitized =
+        sanitized.replaceFirst(
+      RegExp(
+        r'[.\s]+$',
+      ),
+      '',
+    );
+
+    if (sanitized.isEmpty) {
+      return 'medical_document';
+    }
+
+    return sanitized;
+  }
+
+  // ===========================================================================
+  // IMAGE FORMAT DETECTION
+  // ===========================================================================
+
+  bool _looksLikeImage(
+    Uint8List bytes,
+  ) {
     // JPEG
     if (bytes.length >= 3 &&
         bytes[0] == 0xFF &&
@@ -356,11 +753,13 @@ class _DocumentViewerScreenState
     return false;
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // STRING HELPER
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
-  String _stringValue(dynamic value) {
+  String _stringValue(
+    dynamic value,
+  ) {
     if (value == null) {
       return '';
     }
@@ -376,11 +775,13 @@ class _DocumentViewerScreenState
     return valueString;
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // DATE FORMATTER
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
-  String _formatDate(dynamic value) {
+  String _formatDate(
+    dynamic value,
+  ) {
     final valueString =
         _stringValue(value);
 
@@ -390,7 +791,9 @@ class _DocumentViewerScreenState
 
     try {
       final date =
-          DateTime.parse(valueString);
+          DateTime.parse(
+        valueString,
+      );
 
       final localDate =
           date.toLocal();
@@ -414,11 +817,13 @@ class _DocumentViewerScreenState
     }
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // FILE SIZE FORMATTER
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
-  String _formatFileSize(dynamic value) {
+  String _formatFileSize(
+    dynamic value,
+  ) {
     if (value == null) {
       return '';
     }
@@ -443,12 +848,14 @@ class _DocumentViewerScreenState
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // BUILD
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     final fileName =
         _stringValue(
           _metadata?['originalName'],
@@ -460,7 +867,9 @@ class _DocumentViewerScreenState
                 widget.document['originalName'],
               ).isNotEmpty
                 ? _stringValue(
-                    widget.document['originalName'],
+                    widget.document[
+                      'originalName'
+                    ],
                   )
                 : 'Medical Document';
 
@@ -471,6 +880,7 @@ class _DocumentViewerScreenState
       appBar: AppBar(
         backgroundColor:
             Appcolors.background,
+
         elevation: 0,
 
         leading: IconButton(
@@ -479,6 +889,7 @@ class _DocumentViewerScreenState
             color:
                 Appcolors.primaryText,
           ),
+
           onPressed: () {
             Navigator.pop(context);
           },
@@ -494,17 +905,67 @@ class _DocumentViewerScreenState
                 FontWeight.bold,
           ),
         ),
+
+        // ---------------------------------------------------------------------
+        // DOWNLOAD BUTTON
+        // ---------------------------------------------------------------------
+
+        actions: [
+          if (!_isLoading &&
+              _documentBytes != null &&
+              _error == null)
+            _isDownloading
+                ? const Padding(
+                    padding:
+                        EdgeInsets.symmetric(
+                      horizontal: 16,
+                    ),
+
+                    child: Center(
+                      child: SizedBox(
+                        width: 21,
+                        height: 21,
+                        child:
+                            CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color:
+                              Appcolors.primary,
+                        ),
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    tooltip:
+                        'Download document',
+
+                    icon: const Icon(
+                      Icons.download_outlined,
+                      color:
+                          Appcolors.primaryText,
+                    ),
+
+                    onPressed:
+                        _downloadDocument,
+                  ),
+
+          const SizedBox(
+            width: 6,
+          ),
+        ],
       ),
 
-      body: _buildBody(fileName),
+      body:
+          _buildBody(fileName),
     );
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // BODY
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
-  Widget _buildBody(String fileName) {
+  Widget _buildBody(
+    String fileName,
+  ) {
     // -------------------------------------------------------------------------
     // LOADING
     // -------------------------------------------------------------------------
@@ -514,13 +975,16 @@ class _DocumentViewerScreenState
         child: Column(
           mainAxisSize:
               MainAxisSize.min,
+
           children: [
             CircularProgressIndicator(
               color:
                   Appcolors.primary,
             ),
 
-            SizedBox(height: 14),
+            SizedBox(
+              height: 14,
+            ),
 
             Text(
               'Loading document...',
@@ -564,6 +1028,7 @@ class _DocumentViewerScreenState
                 'Unable to open document',
                 textAlign:
                     TextAlign.center,
+
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight:
@@ -581,6 +1046,7 @@ class _DocumentViewerScreenState
                 _error!,
                 textAlign:
                     TextAlign.center,
+
                 style: const TextStyle(
                   fontSize: 13,
                   color:
@@ -710,7 +1176,9 @@ class _DocumentViewerScreenState
             children: [
               Text(
                 fileName,
+
                 maxLines: 2,
+
                 overflow:
                     TextOverflow.ellipsis,
 
@@ -731,7 +1199,9 @@ class _DocumentViewerScreenState
 
                 Text(
                   documentTitle,
+
                   maxLines: 2,
+
                   overflow:
                       TextOverflow.ellipsis,
 
@@ -747,7 +1217,6 @@ class _DocumentViewerScreenState
                 height: 12,
               ),
 
-              // Uploaded by
               if (uploadedBy
                   .isNotEmpty)
                 _infoRow(
@@ -763,7 +1232,6 @@ class _DocumentViewerScreenState
                           : uploadedBy,
                 ),
 
-              // Uploaded date
               if (uploadedDate
                   .isNotEmpty)
                 _infoRow(
@@ -775,7 +1243,6 @@ class _DocumentViewerScreenState
                       uploadedDate,
                 ),
 
-              // Document date
               if (documentDate
                   .isNotEmpty)
                 _infoRow(
@@ -787,7 +1254,6 @@ class _DocumentViewerScreenState
                       documentDate,
                 ),
 
-              // Type
               if (documentType
                   .isNotEmpty)
                 _infoRow(
@@ -799,7 +1265,6 @@ class _DocumentViewerScreenState
                       documentType,
                 ),
 
-              // Size
               if (fileSize
                   .isNotEmpty)
                 _infoRow(
@@ -827,14 +1292,17 @@ class _DocumentViewerScreenState
         Expanded(
           child: Container(
             width: double.infinity,
+
             color:
                 Appcolors.background,
+
             padding:
                 const EdgeInsets.all(12),
 
             child: _isPdf
                 ? PdfViewer.data(
                     _documentBytes!,
+
                     sourceName:
                         'medical-document-'
                         '${_documentId ?? 'document'}'
@@ -847,7 +1315,9 @@ class _DocumentViewerScreenState
                     child: Center(
                       child: Image.memory(
                         _documentBytes!,
-                        fit: BoxFit.contain,
+
+                        fit:
+                            BoxFit.contain,
 
                         errorBuilder: (
                           context,
@@ -880,7 +1350,9 @@ class _DocumentViewerScreenState
                               Text(
                                 'The document could not '
                                 'be displayed.',
-                                style: TextStyle(
+
+                                style:
+                                    TextStyle(
                                   color:
                                       Appcolors
                                           .secondaryText,
@@ -898,9 +1370,9 @@ class _DocumentViewerScreenState
     );
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // INFO ROW
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
   Widget _infoRow({
     required IconData icon,
@@ -931,6 +1403,7 @@ class _DocumentViewerScreenState
 
           Text(
             '$label: ',
+
             style: const TextStyle(
               fontSize: 12,
               fontWeight:
@@ -943,6 +1416,7 @@ class _DocumentViewerScreenState
           Expanded(
             child: Text(
               value,
+
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight:

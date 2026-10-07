@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
 
-import '../utils/appcolors.dart';
 import '../services/patient_service.dart';
+import '../utils/appcolors.dart';
+import 'medical_record_detail_screen.dart';
 
 class PrescriptionsPage extends StatefulWidget {
   const PrescriptionsPage({super.key});
 
   @override
-  State<PrescriptionsPage> createState() =>
-      _PrescriptionsPageState();
+  State<PrescriptionsPage> createState() => _PrescriptionsPageState();
 }
 
-class _PrescriptionsPageState
-    extends State<PrescriptionsPage> {
-  final TextEditingController searchController =
+class _PrescriptionsPageState extends State<PrescriptionsPage> {
+  final TextEditingController _searchController =
       TextEditingController();
 
-  final PatientService _patientService =
-      PatientService();
+  final PatientService _patientService = PatientService();
 
   List<Map<String, dynamic>> _prescriptions = [];
 
@@ -33,7 +31,7 @@ class _PrescriptionsPageState
 
   @override
   void dispose() {
-    searchController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -42,38 +40,47 @@ class _PrescriptionsPageState
   // ============================================================
 
   Future<void> _loadPrescriptions() async {
-    try {
+    if (mounted) {
       setState(() {
         _isLoading = true;
         _error = null;
       });
+    }
 
+    try {
       final patientResponse =
           await _patientService.getMyPatientProfile();
 
-      final patientData =
+      final dynamic rawPatient =
           patientResponse['data'];
 
-      if (patientData == null ||
-          patientData is! Map) {
-        throw Exception(
-          'Patient data was not returned by the server.',
-        );
-      }
+      final Map<String, dynamic> patientData =
+          rawPatient is Map
+              ? Map<String, dynamic>.from(rawPatient)
+              : Map<String, dynamic>.from(patientResponse);
 
-      final patientId =
+      final dynamic rawPatientId =
           patientData['_id'];
 
-      if (patientId == null ||
-          patientId.toString().trim().isEmpty) {
+      if (rawPatientId == null ||
+          rawPatientId.toString().trim().isEmpty) {
         throw Exception(
           'Patient ID was not returned by the server.',
         );
       }
 
+      // IMPORTANT:
+      // Use the backend UUID (_id), not profileId.
+      final String patientId =
+          rawPatientId.toString().trim();
+
+      debugPrint(
+        'PRESCRIPTIONS PATIENT UUID: $patientId',
+      );
+
       final historyResponse =
           await _patientService.getMedicalHistory(
-        patientId.toString(),
+        patientId,
       );
 
       final dynamic rawHistoryData =
@@ -81,39 +88,39 @@ class _PrescriptionsPageState
 
       final Map<String, dynamic> historyData =
           rawHistoryData is Map
-              ? Map<String, dynamic>.from(
-                  rawHistoryData,
-                )
-              : historyResponse;
+              ? Map<String, dynamic>.from(rawHistoryData)
+              : Map<String, dynamic>.from(historyResponse);
 
       final dynamic rawPrescriptions =
           historyData['prescriptions'];
 
+      final List<Map<String, dynamic>>
+          loadedPrescriptions = [];
+
+      if (rawPrescriptions is List) {
+        for (final item in rawPrescriptions) {
+          if (item is Map) {
+            loadedPrescriptions.add(
+              Map<String, dynamic>.from(item),
+            );
+          }
+        }
+      }
+
       if (!mounted) return;
 
       setState(() {
-        if (rawPrescriptions is List) {
-          _prescriptions = rawPrescriptions
-              .whereType<Map>()
-              .map(
-                (item) =>
-                    Map<String, dynamic>.from(item),
-              )
-              .toList();
-        } else {
-          _prescriptions = [];
-        }
-
+        _prescriptions = loadedPrescriptions;
         _isLoading = false;
         _error = null;
       });
 
-      print(
+      debugPrint(
         'PRESCRIPTIONS LOADED: '
-        '${_prescriptions.length}',
+        '${loadedPrescriptions.length}',
       );
     } catch (e) {
-      print(
+      debugPrint(
         'PRESCRIPTIONS ERROR: $e',
       );
 
@@ -121,14 +128,19 @@ class _PrescriptionsPageState
 
       setState(() {
         _isLoading = false;
-        _error = e.toString();
+        _error = e
+            .toString()
+            .replaceFirst(
+              'Exception: ',
+              '',
+            );
         _prescriptions = [];
       });
     }
   }
 
   // ============================================================
-  // UNWRAP RECORD DATA
+  // RECORD DATA
   // ============================================================
 
   Map<String, dynamic> _recordData(
@@ -138,22 +150,25 @@ class _PrescriptionsPageState
         record['data'];
 
     if (nestedData is Map) {
-      return Map<String, dynamic>.from(
-        nestedData,
-      );
+      return {
+        ...record,
+        ...Map<String, dynamic>.from(
+          nestedData,
+        ),
+      };
     }
 
     return record;
   }
 
   // ============================================================
-  // STRING HELPER
+  // STRING HELPERS
   // ============================================================
 
-  String? _stringValue(
-    dynamic value,
-  ) {
-    if (value == null) {
+  String? _stringValue(dynamic value) {
+    if (value == null ||
+        value is Map ||
+        value is List) {
       return null;
     }
 
@@ -168,6 +183,13 @@ class _PrescriptionsPageState
     return result;
   }
 
+  String _normalizedStatus(dynamic value) {
+    return _stringValue(value)
+            ?.toLowerCase()
+            .trim() ??
+        '';
+  }
+
   // ============================================================
   // ACTIVE STATUS
   // ============================================================
@@ -175,24 +197,108 @@ class _PrescriptionsPageState
   bool _isActive(
     Map<String, dynamic> prescription,
   ) {
-    final data =
-        _recordData(prescription);
+    final data = _recordData(prescription);
 
-    final value =
+    // ----------------------------------------------------------
+    // 1. Explicit isActive takes priority
+    // ----------------------------------------------------------
+
+    final dynamic isActive =
         data['isActive'];
 
-    if (value is bool) {
-      return value;
+    if (isActive is bool) {
+      return isActive;
     }
 
-    if (value is String) {
-      return value.toLowerCase() ==
-          'true';
+    if (isActive is String) {
+      final value =
+          isActive.toLowerCase().trim();
+
+      if (value == 'true' ||
+          value == 'active' ||
+          value == 'ongoing' ||
+          value == 'current') {
+        return true;
+      }
+
+      if (value == 'false' ||
+          value == 'inactive' ||
+          value == 'ended' ||
+          value == 'completed' ||
+          value == 'cancelled' ||
+          value == 'canceled' ||
+          value == 'stopped' ||
+          value == 'discontinued' ||
+          value == 'expired') {
+        return false;
+      }
     }
 
-    // If the backend doesn't provide
-    // isActive, treat it as active rather
-    // than hiding the prescription.
+    // ----------------------------------------------------------
+    // 2. Explicit status takes priority over dates
+    // ----------------------------------------------------------
+
+    final String status =
+        _normalizedStatus(
+      data['status'] ??
+          data['prescriptionStatus'],
+    );
+
+    const activeStatuses = {
+      'active',
+      'ongoing',
+      'current',
+      'in_progress',
+      'in progress',
+    };
+
+    const endedStatuses = {
+      'ended',
+      'inactive',
+      'completed',
+      'cancelled',
+      'canceled',
+      'stopped',
+      'discontinued',
+      'expired',
+    };
+
+    if (activeStatuses.contains(status)) {
+      return true;
+    }
+
+    if (endedStatuses.contains(status)) {
+      return false;
+    }
+
+    // ----------------------------------------------------------
+    // 3. End date is only a fallback
+    // ----------------------------------------------------------
+
+    final dynamic endedAt =
+        data['endedAt'] ??
+        data['endDate'] ??
+        data['expiresAt'] ??
+        data['stopDate'];
+
+    if (endedAt != null) {
+      final parsedDate =
+          DateTime.tryParse(
+        endedAt.toString(),
+      );
+
+      if (parsedDate != null &&
+          parsedDate.isBefore(
+            DateTime.now(),
+          )) {
+        return false;
+      }
+    }
+
+    // ----------------------------------------------------------
+    // 4. Unknown = active/visible
+    // ----------------------------------------------------------
+
     return true;
   }
 
@@ -206,7 +312,7 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    final value =
+    final dynamic value =
         data['medicationName'] ??
         data['medicineName'] ??
         data['medicine'] ??
@@ -218,19 +324,15 @@ class _PrescriptionsPageState
 
     if (value is Map) {
       final nested =
-          Map<String, dynamic>.from(
-        value,
-      );
-
-      final nestedName =
-          nested['name'] ??
-          nested['medicationName'] ??
-          nested['medicineName'] ??
-          nested['drugName'] ??
-          nested['displayName'];
+          Map<String, dynamic>.from(value);
 
       return _stringValue(
-            nestedName,
+            nested['name'] ??
+                nested['medicationName'] ??
+                nested['medicineName'] ??
+                nested['drugName'] ??
+                nested['displayName'] ??
+                nested['title'],
           ) ??
           'Prescription';
     }
@@ -249,9 +351,23 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    return _stringValue(
-      data['genericName'],
-    );
+    final dynamic value =
+        data['genericName'] ??
+        data['generic'] ??
+        data['genericDrugName'];
+
+    if (value is Map) {
+      final nested =
+          Map<String, dynamic>.from(value);
+
+      return _stringValue(
+        nested['name'] ??
+            nested['genericName'] ??
+            nested['displayName'],
+      );
+    }
+
+    return _stringValue(value);
   }
 
   // ============================================================
@@ -264,7 +380,7 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    final value =
+    final dynamic value =
         data['dosage'] ??
         data['dose'] ??
         data['dosageInstruction'] ??
@@ -272,15 +388,14 @@ class _PrescriptionsPageState
 
     if (value is Map) {
       final nested =
-          Map<String, dynamic>.from(
-        value,
-      );
+          Map<String, dynamic>.from(value);
 
       return _stringValue(
             nested['value'] ??
                 nested['text'] ??
                 nested['amount'] ??
-                nested['dose'],
+                nested['dose'] ??
+                nested['quantity'],
           ) ??
           'Dosage not specified';
     }
@@ -299,7 +414,7 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    final value =
+    final dynamic value =
         data['frequency'] ??
         data['frequencyText'] ??
         data['schedule'] ??
@@ -307,14 +422,13 @@ class _PrescriptionsPageState
 
     if (value is Map) {
       final nested =
-          Map<String, dynamic>.from(
-        value,
-      );
+          Map<String, dynamic>.from(value);
 
       return _stringValue(
             nested['text'] ??
                 nested['value'] ??
-                nested['frequency'],
+                nested['frequency'] ??
+                nested['schedule'],
           ) ??
           'Frequency not specified';
     }
@@ -333,9 +447,22 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    return _stringValue(
-      data['route'],
-    );
+    final dynamic value =
+        data['route'] ??
+        data['administrationRoute'];
+
+    if (value is Map) {
+      final nested =
+          Map<String, dynamic>.from(value);
+
+      return _stringValue(
+        nested['name'] ??
+            nested['text'] ??
+            nested['value'],
+      );
+    }
+
+    return _stringValue(value);
   }
 
   // ============================================================
@@ -348,9 +475,22 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    return _stringValue(
-      data['duration'],
-    );
+    final dynamic value =
+        data['duration'] ??
+        data['treatmentDuration'];
+
+    if (value is Map) {
+      final nested =
+          Map<String, dynamic>.from(value);
+
+      return _stringValue(
+        nested['text'] ??
+            nested['value'] ??
+            nested['duration'],
+      );
+    }
+
+    return _stringValue(value);
   }
 
   // ============================================================
@@ -363,9 +503,22 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    return _stringValue(
-      data['quantity'],
-    );
+    final dynamic value =
+        data['quantity'] ??
+        data['amount'];
+
+    if (value is Map) {
+      final nested =
+          Map<String, dynamic>.from(value);
+
+      return _stringValue(
+        nested['value'] ??
+            nested['amount'] ??
+            nested['quantity'],
+      );
+    }
+
+    return _stringValue(value);
   }
 
   // ============================================================
@@ -378,14 +531,22 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    final value =
-        data['refills'];
+    final dynamic value =
+        data['refills'] ??
+        data['refillCount'];
 
-    if (value == null) {
-      return null;
+    if (value is Map) {
+      final nested =
+          Map<String, dynamic>.from(value);
+
+      return _stringValue(
+        nested['count'] ??
+            nested['value'] ??
+            nested['refills'],
+      );
     }
 
-    return value.toString();
+    return _stringValue(value);
   }
 
   // ============================================================
@@ -398,40 +559,39 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    final authorName =
+    final String? authorName =
         _stringValue(
-      prescription['authorName'],
+      data['authorName'],
     );
 
     if (authorName != null) {
       return authorName;
     }
 
-    final doctor =
+    final dynamic doctor =
         data['doctor'] ??
         data['doctorName'] ??
         data['prescribedBy'] ??
         data['provider'] ??
         data['prescriber'] ??
-        data['physician'];
+        data['physician'] ??
+        data['orderedBy'];
 
     if (doctor is Map) {
       final doctorMap =
-          Map<String, dynamic>.from(
-        doctor,
+          Map<String, dynamic>.from(doctor);
+
+      final String? name =
+          _stringValue(
+        doctorMap['name'] ??
+            doctorMap['fullName'] ??
+            doctorMap['displayName'] ??
+            doctorMap['doctorName'] ??
+            doctorMap['providerName'],
       );
 
-      final name =
-          doctorMap['name'] ??
-          doctorMap['fullName'] ??
-          doctorMap['displayName'] ??
-          doctorMap['doctorName'];
-
-      final nameValue =
-          _stringValue(name);
-
-      if (nameValue != null) {
-        return nameValue;
+      if (name != null) {
+        return name;
       }
 
       final firstName =
@@ -454,14 +614,8 @@ class _PrescriptionsPageState
       }
     }
 
-    final directDoctor =
-        _stringValue(doctor);
-
-    if (directDoctor != null) {
-      return directDoctor;
-    }
-
-    return 'Healthcare provider';
+    return _stringValue(doctor) ??
+        'Healthcare provider';
   }
 
   // ============================================================
@@ -471,8 +625,13 @@ class _PrescriptionsPageState
   String? _getAuthorRole(
     Map<String, dynamic> prescription,
   ) {
+    final data =
+        _recordData(prescription);
+
     return _stringValue(
-      prescription['authorRole'],
+      data['authorRole'] ??
+          data['providerRole'] ??
+          data['prescriberRole'],
     );
   }
 
@@ -487,7 +646,9 @@ class _PrescriptionsPageState
         _recordData(prescription);
 
     return _stringValue(
-      data['endReason'],
+      data['endReason'] ??
+          data['terminationReason'] ??
+          data['stopReason'],
     );
   }
 
@@ -501,191 +662,170 @@ class _PrescriptionsPageState
     final data =
         _recordData(prescription);
 
-    final value =
+    final dynamic value =
         data['endedAt'] ??
-        data['expiresAt'];
+        data['endDate'] ??
+        data['expiresAt'] ??
+        data['stopDate'];
 
     if (value == null) {
       return null;
     }
 
-    return _formatDate(
-      value.toString(),
-    );
+    return _formatDate(value);
   }
 
   // ============================================================
   // PRESCRIBED DATE
   // ============================================================
 
-  String _getDate(
+  String _getPrescribedDate(
     Map<String, dynamic> prescription,
   ) {
     final data =
         _recordData(prescription);
 
-    final date =
+    final dynamic value =
         data['prescribedAt'] ??
         data['prescribedDate'] ??
         data['date'] ??
         data['startDate'] ??
+        data['orderedAt'] ??
+        data['createdAt'] ??
         prescription['createdAt'];
 
+    return _formatDate(value);
+  }
+
+  // ============================================================
+  // DATE FORMAT
+  // ============================================================
+
+  String _formatDate(dynamic value) {
+    if (value == null) {
+      return 'Date not available';
+    }
+
+    final text =
+        value.toString().trim();
+
+    if (text.isEmpty ||
+        text.toLowerCase() == 'null') {
+      return 'Date not available';
+    }
+
+    final date =
+        DateTime.tryParse(text);
+
     if (date == null) {
-      return 'Date not specified';
+      return text;
     }
 
-    return _formatDate(
-      date.toString(),
-    );
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    return '${date.day} '
+        '${months[date.month - 1]} '
+        '${date.year}';
   }
 
   // ============================================================
-  // FORMAT DATE
+  // ROLE FORMAT
   // ============================================================
 
-  String _formatDate(
-    String value,
-  ) {
-    try {
-      final date =
-          DateTime.parse(value);
+  String _formatRole(String role) {
+    final text =
+        role.trim();
 
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-
-      return '${date.day} '
-          '${months[date.month - 1]} '
-          '${date.year}';
-    } catch (_) {
-      return value;
+    if (text.isEmpty) {
+      return '';
     }
-  }
 
-  // ============================================================
-  // FORMAT ROLE
-  // ============================================================
-
-  String _formatRole(
-    String role,
-  ) {
-    switch (role) {
-      case 'SUPER_ADMIN':
-        return 'Super Administrator';
-
-      case 'DOCTOR':
-        return 'Doctor';
-
-      case 'NURSE':
-        return 'Nurse';
-
-      case 'ADMIN':
-        return 'Administrator';
-
-      default:
-        return role
-            .replaceAll('_', ' ')
-            .toLowerCase()
-            .split(' ')
-            .map(
-              (word) {
-                if (word.isEmpty) {
-                  return word;
-                }
-
-                return word[0].toUpperCase() +
-                    word.substring(1);
-              },
-            )
-            .join(' ');
-    }
+    return text
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ')
+        .split(' ')
+        .where(
+          (word) => word.isNotEmpty,
+        )
+        .map(
+          (word) =>
+              '${word[0].toUpperCase()}'
+              '${word.substring(1).toLowerCase()}',
+        )
+        .join(' ');
   }
 
   // ============================================================
   // SEARCH
   // ============================================================
 
-  List<Map<String, dynamic>>
-      get _filteredPrescriptions {
-    if (_searchText.trim().isEmpty) {
-      return _prescriptions;
+  bool _matchesSearch(
+    Map<String, dynamic> prescription,
+  ) {
+    final query =
+        _searchText.toLowerCase().trim();
+
+    if (query.isEmpty) {
+      return true;
     }
 
-    final query =
-        _searchText.trim().toLowerCase();
+    final data =
+        _recordData(prescription);
 
-    return _prescriptions.where(
-      (prescription) {
-        final medicine =
-            _getMedicineName(
-          prescription,
-        );
+    final searchableText = [
+      _getMedicineName(prescription),
+      _getGenericName(prescription),
+      _getDose(prescription),
+      _getFrequency(prescription),
+      _getPrescribedBy(prescription),
+      _getAuthorRole(prescription),
+      _getRoute(prescription),
+      _getDuration(prescription),
+      _getQuantity(prescription),
+      _getRefills(prescription),
+      _stringValue(
+        data['status'] ??
+            data['prescriptionStatus'],
+      ),
+      _getEndReason(prescription),
+    ]
+        .whereType<String>()
+        .join(' ')
+        .toLowerCase();
 
-        final generic =
-            _getGenericName(
-          prescription,
-        );
-
-        final dose =
-            _getDose(prescription);
-
-        final frequency =
-            _getFrequency(
-          prescription,
-        );
-
-        final prescribedBy =
-            _getPrescribedBy(
-          prescription,
-        );
-
-        final searchableText = [
-          medicine,
-          generic ?? '',
-          dose,
-          frequency,
-          prescribedBy,
-          _getRoute(prescription) ?? '',
-          _getDuration(prescription) ?? '',
-          _getQuantity(prescription) ?? '',
-        ].join(' ').toLowerCase();
-
-        return searchableText.contains(
-          query,
-        );
-      },
-    ).toList();
+    return searchableText.contains(query);
   }
 
   // ============================================================
-  // ACTIVE PRESCRIPTIONS
+  // FILTERED DATA
   // ============================================================
+
+  List<Map<String, dynamic>>
+      get _filteredPrescriptions {
+    return _prescriptions
+        .where(_matchesSearch)
+        .toList();
+  }
 
   List<Map<String, dynamic>>
       get _activePrescriptions {
     return _filteredPrescriptions
-        .where(
-          (prescription) =>
-              _isActive(prescription),
-        )
+        .where(_isActive)
         .toList();
   }
-
-  // ============================================================
-  // ENDED PRESCRIPTIONS
-  // ============================================================
 
   List<Map<String, dynamic>>
       get _endedPrescriptions {
@@ -698,702 +838,20 @@ class _PrescriptionsPageState
   }
 
   // ============================================================
-  // BUILD
+  // OPEN DETAILS
   // ============================================================
 
-  @override
-  Widget build(BuildContext context) {
-    final active =
-        _activePrescriptions;
-
-    final ended =
-        _endedPrescriptions;
-
-    return Scaffold(
-      backgroundColor:
-          Appcolors.background,
-
-      appBar: AppBar(
-        backgroundColor:
-            Appcolors.background,
-        elevation: 0,
-
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back,
-            color:
-                Appcolors.primaryText,
-          ),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
-
-        title: const Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Prescriptions',
-              style: TextStyle(
-                color:
-                    Appcolors.primaryText,
-                fontSize: 21,
-                fontWeight:
-                    FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 2),
-            Text(
-              'Your prescribed medicines',
-              style: TextStyle(
-                color:
-                    Appcolors.secondaryText,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-
-      body: _isLoading
-          ? const Center(
-              child:
-                  CircularProgressIndicator(
-                color:
-                    Appcolors.primary,
-              ),
-            )
-          : _error != null
-              ? _buildErrorState()
-              : RefreshIndicator(
-                  color:
-                      Appcolors.primary,
-                  onRefresh:
-                      _loadPrescriptions,
-                  child:
-                      SingleChildScrollView(
-                    physics:
-                        const AlwaysScrollableScrollPhysics(),
-                    padding:
-                        const EdgeInsets.symmetric(
-                      horizontal: 20,
-                    ),
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment
-                              .start,
-                      children: [
-                        const SizedBox(
-                          height: 15,
-                        ),
-
-                        // ------------------------------------------------
-                        // SEARCH
-                        // ------------------------------------------------
-
-                        TextField(
-                          controller:
-                              searchController,
-                          onChanged:
-                              (value) {
-                            setState(() {
-                              _searchText =
-                                  value;
-                            });
-                          },
-                          decoration:
-                              InputDecoration(
-                            hintText:
-                                'Search medicines...',
-                            prefixIcon:
-                                const Icon(
-                              Icons.search,
-                              color: Appcolors
-                                  .secondaryText,
-                            ),
-                            filled: true,
-                            fillColor:
-                                Appcolors
-                                    .surface,
-                            border:
-                                OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                14,
-                              ),
-                              borderSide:
-                                  BorderSide(
-                                color:
-                                    Appcolors
-                                        .border,
-                              ),
-                            ),
-                            enabledBorder:
-                                OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                14,
-                              ),
-                              borderSide:
-                                  BorderSide(
-                                color:
-                                    Appcolors
-                                        .border,
-                              ),
-                            ),
-                            focusedBorder:
-                                OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                14,
-                              ),
-                              borderSide:
-                                  const BorderSide(
-                                color:
-                                    Appcolors
-                                        .primary,
-                              ),
-                            ),
-                            contentPadding:
-                                const EdgeInsets
-                                    .symmetric(
-                              vertical: 15,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 28,
-                        ),
-
-                        // ------------------------------------------------
-                        // ACTIVE
-                        // ------------------------------------------------
-
-                        const Text(
-                          'ACTIVE',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight:
-                                FontWeight.bold,
-                            letterSpacing: 1.2,
-                            color: Appcolors
-                                .secondaryText,
-                          ),
-                        ),
-
-                        const SizedBox(
-                          height: 12,
-                        ),
-
-                        if (active.isEmpty)
-                          _buildSectionEmptyState(
-                            icon: Icons
-                                .medication_outlined,
-                            title:
-                                'No active prescriptions',
-                            message:
-                                'You currently have no active prescriptions.',
-                          )
-                        else
-                          ...active.map(
-                            (
-                              prescription,
-                            ) =>
-                                _buildPrescriptionCard(
-                              prescription,
-                            ),
-                          ),
-
-                        // ------------------------------------------------
-                        // ENDED
-                        // ------------------------------------------------
-
-                        if (ended.isNotEmpty) ...[
-                          const SizedBox(
-                            height: 18,
-                          ),
-
-                          const Text(
-                            'ENDED',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight:
-                                  FontWeight.bold,
-                              letterSpacing: 1.2,
-                              color: Appcolors
-                                  .secondaryText,
-                            ),
-                          ),
-
-                          const SizedBox(
-                            height: 12,
-                          ),
-
-                          ...ended.map(
-                            (
-                              prescription,
-                            ) =>
-                                _buildPrescriptionCard(
-                              prescription,
-                            ),
-                          ),
-                        ],
-
-                        const SizedBox(
-                          height: 30,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-    );
-  }
-
-  // ============================================================
-  // PRESCRIPTION CARD
-  // ============================================================
-
-  Widget _buildPrescriptionCard(
+  void _openPrescriptionDetails(
     Map<String, dynamic> prescription,
   ) {
-    final active =
-        _isActive(prescription);
-
-    final medicine =
-        _getMedicineName(
-      prescription,
-    );
-
-    final generic =
-        _getGenericName(
-      prescription,
-    );
-
-    final dose =
-        _getDose(prescription);
-
-    final frequency =
-        _getFrequency(
-      prescription,
-    );
-
-    final prescribedBy =
-        _getPrescribedBy(
-      prescription,
-    );
-
-    final authorRole =
-        _getAuthorRole(
-      prescription,
-    );
-
-    final route =
-        _getRoute(prescription);
-
-    final duration =
-        _getDuration(prescription);
-
-    final quantity =
-        _getQuantity(prescription);
-
-    final refills =
-        _getRefills(prescription);
-
-    final date =
-        _getDate(prescription);
-
-    final endReason =
-        _getEndReason(prescription);
-
-    final endedDate =
-        _getEndedDate(prescription);
-
-    return Container(
-      width: double.infinity,
-      margin:
-          const EdgeInsets.only(
-        bottom: 15,
-      ),
-      padding:
-          const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color:
-            Appcolors.surface,
-        borderRadius:
-            BorderRadius.circular(
-          16,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            MedicalRecordDetailScreen(
+          type: 'prescription',
+          record: prescription,
         ),
-        border: Border.all(
-          color:
-              Appcolors.border,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment
-                .start,
-        children: [
-          // ----------------------------------------------------
-          // MEDICINE
-          // ----------------------------------------------------
-
-          Row(
-            crossAxisAlignment:
-                CrossAxisAlignment
-                    .start,
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration:
-                    BoxDecoration(
-                  color: Appcolors
-                      .primary
-                      .withValues(
-                    alpha: 0.1,
-                  ),
-                  borderRadius:
-                      BorderRadius
-                          .circular(
-                    12,
-                  ),
-                ),
-                child:
-                    const Icon(
-                  Icons
-                      .medication_outlined,
-                  color: Appcolors
-                      .primary,
-                  size: 25,
-                ),
-              ),
-
-              const SizedBox(
-                width: 12,
-              ),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment
-                          .start,
-                  children: [
-                    Text(
-                      medicine,
-                      maxLines: 2,
-                      overflow:
-                          TextOverflow
-                              .ellipsis,
-                      style:
-                          const TextStyle(
-                        fontSize: 17,
-                        fontWeight:
-                            FontWeight
-                                .bold,
-                        color: Appcolors
-                            .primaryText,
-                      ),
-                    ),
-
-                    if (generic != null) ...[
-                      const SizedBox(
-                        height: 4,
-                      ),
-                      Text(
-                        'Generic: $generic',
-                        maxLines: 2,
-                        overflow:
-                            TextOverflow
-                                .ellipsis,
-                        style:
-                            const TextStyle(
-                          fontSize: 12,
-                          color: Appcolors
-                              .secondaryText,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-
-              const SizedBox(
-                width: 8,
-              ),
-
-              _buildStatusBadge(
-                active: active,
-              ),
-            ],
-          ),
-
-          const SizedBox(
-            height: 18,
-          ),
-
-          // ----------------------------------------------------
-          // DOSE
-          // ----------------------------------------------------
-
-          _buildDetailRow(
-            icon: Icons
-                .medication_outlined,
-            label: 'Dose',
-            value: dose,
-          ),
-
-          const SizedBox(
-            height: 10,
-          ),
-
-          // ----------------------------------------------------
-          // FREQUENCY
-          // ----------------------------------------------------
-
-          _buildDetailRow(
-            icon:
-                Icons.repeat,
-            label: 'Frequency',
-            value:
-                frequency,
-          ),
-
-          // ----------------------------------------------------
-          // ROUTE
-          // ----------------------------------------------------
-
-          if (route != null) ...[
-            const SizedBox(
-              height: 10,
-            ),
-            _buildDetailRow(
-              icon:
-                  Icons.alt_route,
-              label: 'Route',
-              value:
-                  route,
-            ),
-          ],
-
-          // ----------------------------------------------------
-          // DURATION
-          // ----------------------------------------------------
-
-          if (duration != null) ...[
-            const SizedBox(
-              height: 10,
-            ),
-            _buildDetailRow(
-              icon:
-                  Icons.timer_outlined,
-              label: 'Duration',
-              value:
-                  duration,
-            ),
-          ],
-
-          // ----------------------------------------------------
-          // QUANTITY
-          // ----------------------------------------------------
-
-          if (quantity != null) ...[
-            const SizedBox(
-              height: 10,
-            ),
-            _buildDetailRow(
-              icon:
-                  Icons.inventory_2_outlined,
-              label: 'Quantity',
-              value:
-                  quantity,
-            ),
-          ],
-
-          // ----------------------------------------------------
-          // REFILLS
-          // ----------------------------------------------------
-
-          if (refills != null) ...[
-            const SizedBox(
-              height: 10,
-            ),
-            _buildDetailRow(
-              icon:
-                  Icons.refresh,
-              label: 'Refills',
-              value:
-                  refills,
-            ),
-          ],
-
-          const SizedBox(
-            height: 16,
-          ),
-
-          Divider(
-            color:
-                Appcolors.border,
-          ),
-
-          const SizedBox(
-            height: 10,
-          ),
-
-          // ----------------------------------------------------
-          // PRESCRIBED BY
-          // ----------------------------------------------------
-
-          Row(
-            crossAxisAlignment:
-                CrossAxisAlignment
-                    .start,
-            children: [
-              const Icon(
-                Icons
-                    .person_outline,
-                size: 18,
-                color: Appcolors
-                    .secondaryText,
-              ),
-
-              const SizedBox(
-                width: 8,
-              ),
-
-              Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment
-                          .start,
-                  children: [
-                    const Text(
-                      'Prescribed by',
-                      style:
-                          TextStyle(
-                        fontSize: 11,
-                        fontWeight:
-                            FontWeight
-                                .w500,
-                        color: Appcolors
-                            .secondaryText,
-                      ),
-                    ),
-
-                    const SizedBox(
-                      height: 2,
-                    ),
-
-                    Text(
-                      prescribedBy,
-                      style:
-                          const TextStyle(
-                        color: Appcolors
-                            .primaryText,
-                        fontSize: 13,
-                        fontWeight:
-                            FontWeight
-                                .w600,
-                      ),
-                    ),
-
-                    if (authorRole != null) ...[
-                      const SizedBox(
-                        height: 2,
-                      ),
-                      Text(
-                        _formatRole(
-                          authorRole,
-                        ),
-                        style:
-                            const TextStyle(
-                          color: Appcolors
-                              .secondaryText,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(
-            height: 10,
-          ),
-
-          // ----------------------------------------------------
-          // DATE
-          // ----------------------------------------------------
-
-          Row(
-            crossAxisAlignment:
-                CrossAxisAlignment
-                    .start,
-            children: [
-              const Icon(
-                Icons
-                    .calendar_today_outlined,
-                size: 17,
-                color: Appcolors
-                    .secondaryText,
-              ),
-
-              const SizedBox(
-                width: 8,
-              ),
-
-              Expanded(
-                child: Text(
-                  date,
-                  style:
-                      const TextStyle(
-                    color: Appcolors
-                        .secondaryText,
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // ----------------------------------------------------
-          // ENDED INFORMATION
-          // ----------------------------------------------------
-
-          if (!active &&
-              (endReason != null ||
-                  endedDate != null)) ...[
-            const SizedBox(
-              height: 10,
-            ),
-
-            if (endedDate != null)
-              _buildSmallInfoRow(
-                icon: Icons
-                    .event_busy_outlined,
-                label: 'Ended',
-                value: endedDate,
-              ),
-
-            if (endReason != null) ...[
-              const SizedBox(
-                height: 8,
-              ),
-              _buildSmallInfoRow(
-                icon: Icons
-                    .info_outline,
-                label: 'Reason',
-                value: endReason,
-              ),
-            ],
-          ],
-        ],
       ),
     );
   }
@@ -1405,38 +863,51 @@ class _PrescriptionsPageState
   Widget _buildStatusBadge({
     required bool active,
   }) {
+    final backgroundColor = active
+        ? Colors.green.withValues(
+            alpha: 0.10,
+          )
+        : Colors.grey.withValues(
+            alpha: 0.12,
+          );
+
+    final textColor = active
+        ? Colors.green.shade700
+        : Colors.grey.shade700;
+
     return Container(
       padding:
           const EdgeInsets.symmetric(
-        horizontal: 9,
-        vertical: 5,
+        horizontal: 10,
+        vertical: 6,
       ),
       decoration: BoxDecoration(
-        color: active
-            ? Appcolors.primary
-                .withValues(
-                alpha: 0.1,
-              )
-            : Appcolors.secondaryText
-                .withValues(
-                alpha: 0.1,
-              ),
+        color: backgroundColor,
         borderRadius:
-            BorderRadius.circular(
-          20,
-        ),
+            BorderRadius.circular(20),
       ),
-      child: Text(
-        active ? 'ACTIVE' : 'ENDED',
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight:
-              FontWeight.bold,
-          letterSpacing: 0.6,
-          color: active
-              ? Appcolors.primary
-              : Appcolors.secondaryText,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: textColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            active ? 'Active' : 'Ended',
+            style: TextStyle(
+              color: textColor,
+              fontSize: 11,
+              fontWeight:
+                  FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1452,40 +923,37 @@ class _PrescriptionsPageState
   }) {
     return Row(
       crossAxisAlignment:
-          CrossAxisAlignment
-              .start,
+          CrossAxisAlignment.start,
       children: [
         Icon(
           icon,
-          size: 18,
-          color:
-              Appcolors.primary,
+          size: 17,
+          color: Appcolors.secondaryText,
         ),
-
-        const SizedBox(
-          width: 8,
-        ),
-
-        Text(
-          '$label: ',
-          style:
-              const TextStyle(
-            fontSize: 14,
-            fontWeight:
-                FontWeight.w600,
-            color:
-                Appcolors.primaryText,
+        const SizedBox(width: 9),
+        SizedBox(
+          width: 82,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color:
+                  Appcolors.secondaryText,
+              fontWeight:
+                  FontWeight.w500,
+            ),
           ),
         ),
-
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
             value,
-            style:
-                const TextStyle(
-              fontSize: 14,
+            style: const TextStyle(
+              fontSize: 13,
               color:
-                  Appcolors.secondaryText,
+                  Appcolors.primaryText,
+              fontWeight:
+                  FontWeight.w600,
             ),
           ),
         ),
@@ -1504,8 +972,7 @@ class _PrescriptionsPageState
   }) {
     return Row(
       crossAxisAlignment:
-          CrossAxisAlignment
-              .start,
+          CrossAxisAlignment.start,
       children: [
         Icon(
           icon,
@@ -1513,31 +980,30 @@ class _PrescriptionsPageState
           color:
               Appcolors.secondaryText,
         ),
-
-        const SizedBox(
-          width: 8,
-        ),
-
-        Text(
-          '$label: ',
-          style:
-              const TextStyle(
-            fontSize: 12,
-            fontWeight:
-                FontWeight.w600,
-            color:
-                Appcolors.secondaryText,
-          ),
-        ),
-
-        Expanded(
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 48,
           child: Text(
-            value,
-            style:
-                const TextStyle(
+            label,
+            style: const TextStyle(
               fontSize: 12,
               color:
                   Appcolors.secondaryText,
+              fontWeight:
+                  FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12,
+              color:
+                  Appcolors.primaryText,
+              fontWeight:
+                  FontWeight.w600,
             ),
           ),
         ),
@@ -1546,63 +1012,589 @@ class _PrescriptionsPageState
   }
 
   // ============================================================
-  // EMPTY SECTION
+  // PRESCRIPTION CARD
   // ============================================================
 
-  Widget _buildSectionEmptyState({
-    required IconData icon,
-    required String title,
-    required String message,
-  }) {
+  Widget _buildPrescriptionCard(
+    Map<String, dynamic> prescription,
+  ) {
+    final active =
+        _isActive(prescription);
+
+    final medicine =
+        _getMedicineName(prescription);
+
+    final generic =
+        _getGenericName(prescription);
+
+    final dose =
+        _getDose(prescription);
+
+    final frequency =
+        _getFrequency(prescription);
+
+    final prescribedBy =
+        _getPrescribedBy(prescription);
+
+    final authorRole =
+        _getAuthorRole(prescription);
+
+    final route =
+        _getRoute(prescription);
+
+    final duration =
+        _getDuration(prescription);
+
+    final quantity =
+        _getQuantity(prescription);
+
+    final refills =
+        _getRefills(prescription);
+
+    final date =
+        _getPrescribedDate(prescription);
+
+    final endReason =
+        _getEndReason(prescription);
+
+    final endedDate =
+        _getEndedDate(prescription);
+
     return Container(
-      width: double.infinity,
-      padding:
-          const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 35,
+      margin:
+          const EdgeInsets.only(
+        bottom: 12,
       ),
-      decoration:
-          BoxDecoration(
-        color:
-            Appcolors.surface,
+      decoration: BoxDecoration(
+        color: Appcolors.surface,
         borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+            BorderRadius.circular(18),
         border: Border.all(
-          color:
-              Appcolors.border,
+          color: Appcolors.border,
         ),
       ),
-      child: Column(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius:
+            BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius:
+              BorderRadius.circular(18),
+          onTap: () {
+            _openPrescriptionDetails(
+              prescription,
+            );
+          },
+          child: Padding(
+            padding:
+                const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                // ------------------------------------------------
+                // HEADER
+                // ------------------------------------------------
+
+                Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration:
+                          BoxDecoration(
+                        color: Appcolors
+                            .primary
+                            .withValues(
+                          alpha: 0.10,
+                        ),
+                        borderRadius:
+                            BorderRadius
+                                .circular(
+                          14,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons
+                            .medication_outlined,
+                        color:
+                            Appcolors.primary,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 12,
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
+                        children: [
+                          Text(
+                            medicine,
+                            maxLines: 2,
+                            overflow:
+                                TextOverflow
+                                    .ellipsis,
+                            style:
+                                const TextStyle(
+                              fontSize: 16,
+                              fontWeight:
+                                  FontWeight
+                                      .w700,
+                              color: Appcolors
+                                  .primaryText,
+                            ),
+                          ),
+                          if (generic !=
+                              null) ...[
+                            const SizedBox(
+                              height: 4,
+                            ),
+                            Text(
+                              'Generic: $generic',
+                              maxLines: 2,
+                              overflow:
+                                  TextOverflow
+                                      .ellipsis,
+                              style:
+                                  const TextStyle(
+                                fontSize: 12,
+                                color: Appcolors
+                                    .secondaryText,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 8,
+                    ),
+                    _buildStatusBadge(
+                      active: active,
+                    ),
+                  ],
+                ),
+
+                const SizedBox(
+                  height: 18,
+                ),
+
+                // ------------------------------------------------
+                // MEDICATION DETAILS
+                // ------------------------------------------------
+
+                _buildDetailRow(
+                  icon: Icons
+                      .medication_outlined,
+                  label: 'Dose',
+                  value: dose,
+                ),
+
+                const SizedBox(
+                  height: 10,
+                ),
+
+                _buildDetailRow(
+                  icon: Icons.repeat,
+                  label: 'Frequency',
+                  value: frequency,
+                ),
+
+                if (route != null) ...[
+                  const SizedBox(
+                    height: 10,
+                  ),
+                  _buildDetailRow(
+                    icon:
+                        Icons.alt_route,
+                    label: 'Route',
+                    value: route,
+                  ),
+                ],
+
+                if (duration != null) ...[
+                  const SizedBox(
+                    height: 10,
+                  ),
+                  _buildDetailRow(
+                    icon: Icons
+                        .timer_outlined,
+                    label: 'Duration',
+                    value: duration,
+                  ),
+                ],
+
+                if (quantity != null) ...[
+                  const SizedBox(
+                    height: 10,
+                  ),
+                  _buildDetailRow(
+                    icon: Icons
+                        .inventory_2_outlined,
+                    label: 'Quantity',
+                    value: quantity,
+                  ),
+                ],
+
+                if (refills != null) ...[
+                  const SizedBox(
+                    height: 10,
+                  ),
+                  _buildDetailRow(
+                    icon: Icons
+                        .refresh_outlined,
+                    label: 'Refills',
+                    value: refills,
+                  ),
+                ],
+
+                const SizedBox(
+                  height: 14,
+                ),
+
+                const Divider(
+                  height: 1,
+                  color: Appcolors.border,
+                ),
+
+                const SizedBox(
+                  height: 14,
+                ),
+
+                // ------------------------------------------------
+                // PRESCRIBED BY
+                // ------------------------------------------------
+
+                Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
+                  children: [
+                    const Icon(
+                      Icons
+                          .person_outline,
+                      size: 18,
+                      color: Appcolors
+                          .secondaryText,
+                    ),
+                    const SizedBox(
+                      width: 8,
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
+                        children: [
+                          const Text(
+                            'Prescribed by',
+                            style:
+                                TextStyle(
+                              fontSize: 11,
+                              fontWeight:
+                                  FontWeight
+                                      .w500,
+                              color: Appcolors
+                                  .secondaryText,
+                            ),
+                          ),
+                          const SizedBox(
+                            height: 2,
+                          ),
+                          Text(
+                            prescribedBy,
+                            maxLines: 2,
+                            overflow:
+                                TextOverflow
+                                    .ellipsis,
+                            style:
+                                const TextStyle(
+                              color: Appcolors
+                                  .primaryText,
+                              fontSize: 13,
+                              fontWeight:
+                                  FontWeight
+                                      .w600,
+                            ),
+                          ),
+                          if (authorRole !=
+                              null) ...[
+                            const SizedBox(
+                              height: 2,
+                            ),
+                            Text(
+                              _formatRole(
+                                authorRole,
+                              ),
+                              maxLines: 1,
+                              overflow:
+                                  TextOverflow
+                                      .ellipsis,
+                              style:
+                                  const TextStyle(
+                                color: Appcolors
+                                    .secondaryText,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(
+                  height: 10,
+                ),
+
+                // ------------------------------------------------
+                // PRESCRIBED DATE
+                // ------------------------------------------------
+
+                Row(
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
+                  children: [
+                    const Icon(
+                      Icons
+                          .calendar_today_outlined,
+                      size: 17,
+                      color: Appcolors
+                          .secondaryText,
+                    ),
+                    const SizedBox(
+                      width: 8,
+                    ),
+                    Expanded(
+                      child: Text(
+                        date,
+                        style:
+                            const TextStyle(
+                          color: Appcolors
+                              .secondaryText,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // ------------------------------------------------
+                // ENDED INFORMATION
+                // ------------------------------------------------
+
+                if (!active &&
+                    (endReason != null ||
+                        endedDate != null)) ...[
+                  const SizedBox(
+                    height: 10,
+                  ),
+                  if (endedDate != null)
+                    _buildSmallInfoRow(
+                      icon: Icons
+                          .event_busy_outlined,
+                      label: 'Ended',
+                      value: endedDate,
+                    ),
+                  if (endReason != null) ...[
+                    const SizedBox(
+                      height: 6,
+                    ),
+                    _buildSmallInfoRow(
+                      icon: Icons
+                          .info_outline,
+                      label: 'Reason',
+                      value: endReason,
+                    ),
+                  ],
+                ],
+
+                const SizedBox(
+                  height: 12,
+                ),
+
+                // ------------------------------------------------
+                // VIEW DETAILS
+                // ------------------------------------------------
+
+                Row(
+                  mainAxisAlignment:
+                      MainAxisAlignment.end,
+                  children: [
+                    const Text(
+                      'View details',
+                      style: TextStyle(
+                        color:
+                            Appcolors.primary,
+                        fontSize: 12,
+                        fontWeight:
+                            FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 4,
+                    ),
+                    const Icon(
+                      Icons
+                          .arrow_forward_ios,
+                      size: 12,
+                      color:
+                          Appcolors.primary,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // SECTION HEADER
+  // ============================================================
+
+  Widget _buildSectionHeader({
+    required String title,
+    required int count,
+    required bool active,
+  }) {
+    return Padding(
+      padding:
+          const EdgeInsets.fromLTRB(
+        2,
+        8,
+        2,
+        12,
+      ),
+      child: Row(
         children: [
-          Icon(
-            icon,
-            size: 42,
-            color:
-                Appcolors.secondaryText,
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: active
+                  ? Colors.green
+                  : Colors.grey,
+              shape: BoxShape.circle,
+            ),
           ),
-
           const SizedBox(
-            height: 12,
+            width: 8,
           ),
-
           Text(
             title,
-            style:
-                const TextStyle(
-              fontSize: 16,
+            style: const TextStyle(
+              fontSize: 15,
               fontWeight:
-                  FontWeight.bold,
+                  FontWeight.w700,
               color:
                   Appcolors.primaryText,
             ),
           ),
+          const SizedBox(
+            width: 7,
+          ),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(
+              horizontal: 7,
+              vertical: 3,
+            ),
+            decoration:
+                BoxDecoration(
+              color: Appcolors.primary
+                  .withValues(
+                alpha: 0.08,
+              ),
+              borderRadius:
+                  BorderRadius.circular(
+                10,
+              ),
+            ),
+            child: Text(
+              count.toString(),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight:
+                    FontWeight.w700,
+                color:
+                    Appcolors.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
+  // ============================================================
+  // EMPTY STATE
+  // ============================================================
+
+  Widget _buildEmptyState({
+    required String title,
+    required String message,
+    required IconData icon,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding:
+          const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: Appcolors.surface,
+        borderRadius:
+            BorderRadius.circular(18),
+        border: Border.all(
+          color: Appcolors.border,
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Appcolors.primary
+                  .withValues(
+                alpha: 0.08,
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color:
+                  Appcolors.primary,
+              size: 30,
+            ),
+          ),
+          const SizedBox(
+            height: 14,
+          ),
+          Text(
+            title,
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
+              fontSize: 15,
+              fontWeight:
+                  FontWeight.w700,
+              color:
+                  Appcolors.primaryText,
+            ),
+          ),
           const SizedBox(
             height: 6,
           ),
-
           Text(
             message,
             textAlign:
@@ -1627,42 +1619,48 @@ class _PrescriptionsPageState
     return Center(
       child: Padding(
         padding:
-            const EdgeInsets.all(
-          24,
-        ),
+            const EdgeInsets.all(24),
         child: Column(
-          mainAxisSize:
-              MainAxisSize.min,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.error_outline,
-              size: 48,
-              color:
-                  Appcolors.error,
+            Container(
+              width: 64,
+              height: 64,
+              decoration:
+                  BoxDecoration(
+                color: Colors.red
+                    .withValues(
+                  alpha: 0.08,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.error_outline,
+                color:
+                    Colors.red.shade600,
+                size: 32,
+              ),
             ),
-
             const SizedBox(
-              height: 14,
+              height: 16,
             ),
-
             const Text(
               'Unable to load prescriptions',
               textAlign:
                   TextAlign.center,
               style:
                   TextStyle(
-                fontSize: 18,
+                fontSize: 17,
                 fontWeight:
-                    FontWeight.bold,
-                color: Appcolors
-                    .primaryText,
+                    FontWeight.w700,
+                color:
+                    Appcolors.primaryText,
               ),
             ),
-
             const SizedBox(
               height: 8,
             ),
-
             Text(
               _error ??
                   'Something went wrong.',
@@ -1671,34 +1669,344 @@ class _PrescriptionsPageState
               style:
                   const TextStyle(
                 fontSize: 13,
-                color: Appcolors
-                    .secondaryText,
+                color:
+                    Appcolors.secondaryText,
               ),
             ),
-
             const SizedBox(
               height: 18,
             ),
-
-            ElevatedButton(
+            ElevatedButton.icon(
               onPressed:
                   _loadPrescriptions,
+              icon: const Icon(
+                Icons.refresh,
+              ),
+              label: const Text(
+                'Try again',
+              ),
               style:
-                  ElevatedButton
-                      .styleFrom(
+                  ElevatedButton.styleFrom(
                 backgroundColor:
-                    Appcolors
-                        .primary,
+                    Appcolors.primary,
                 foregroundColor:
                     Colors.white,
-              ),
-              child:
-                  const Text(
-                'Retry',
+                elevation: 0,
+                padding:
+                    const EdgeInsets
+                        .symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(
+                    12,
+                  ),
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // SEARCH FIELD
+  // ============================================================
+
+  Widget _buildSearchField() {
+    return TextField(
+      controller:
+          _searchController,
+      onChanged: (value) {
+        setState(() {
+          _searchText = value;
+        });
+      },
+      textInputAction:
+          TextInputAction.search,
+      decoration:
+          InputDecoration(
+        hintText:
+            'Search medicines, doctors, dosage...',
+        hintStyle:
+            const TextStyle(
+          fontSize: 13,
+          color:
+              Appcolors.secondaryText,
+        ),
+        prefixIcon:
+            const Icon(
+          Icons.search,
+          color:
+              Appcolors.secondaryText,
+        ),
+        suffixIcon:
+            _searchText.isNotEmpty
+                ? IconButton(
+                    onPressed: () {
+                      _searchController
+                          .clear();
+
+                      setState(() {
+                        _searchText = '';
+                      });
+                    },
+                    icon:
+                        const Icon(
+                      Icons.clear,
+                    ),
+                  )
+                : null,
+        filled: true,
+        fillColor:
+            Appcolors.surface,
+        contentPadding:
+            const EdgeInsets
+                .symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+        border:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(
+            16,
+          ),
+          borderSide:
+              const BorderSide(
+            color:
+                Appcolors.border,
+          ),
+        ),
+        enabledBorder:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(
+            16,
+          ),
+          borderSide:
+              const BorderSide(
+            color:
+                Appcolors.border,
+          ),
+        ),
+        focusedBorder:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(
+            16,
+          ),
+          borderSide:
+              const BorderSide(
+            color:
+                Appcolors.primary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // MAIN BUILD
+  // ============================================================
+
+  @override
+  Widget build(BuildContext context) {
+    final activePrescriptions =
+        _activePrescriptions;
+
+    final endedPrescriptions =
+        _endedPrescriptions;
+
+    final filteredPrescriptions =
+        _filteredPrescriptions;
+
+    return Scaffold(
+      backgroundColor:
+          Appcolors.background,
+      appBar: AppBar(
+        backgroundColor:
+            Appcolors.background,
+        foregroundColor:
+            Appcolors.primaryText,
+        elevation: 0,
+        title: const Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Prescriptions',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight:
+                    FontWeight.w700,
+              ),
+            ),
+            SizedBox(
+              height: 2,
+            ),
+            Text(
+              'Your prescribed medicines',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight:
+                    FontWeight.w400,
+                color:
+                    Appcolors.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: SafeArea(
+        child: _isLoading
+            ? const Center(
+                child:
+                    CircularProgressIndicator(
+                  color:
+                      Appcolors.primary,
+                ),
+              )
+            : _error != null
+                ? _buildErrorState()
+                : RefreshIndicator(
+                    color:
+                        Appcolors.primary,
+                    onRefresh:
+                        _loadPrescriptions,
+                    child:
+                        CustomScrollView(
+                      physics:
+                          const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        // ------------------------------------------------
+                        // SEARCH
+                        // ------------------------------------------------
+
+                        SliverToBoxAdapter(
+                          child:
+                              Padding(
+                            padding:
+                                const EdgeInsets
+                                    .fromLTRB(
+                              16,
+                              8,
+                              16,
+                              18,
+                            ),
+                            child:
+                                _buildSearchField(),
+                          ),
+                        ),
+
+                        // ------------------------------------------------
+                        // NO RESULTS
+                        // ------------------------------------------------
+
+                        if (filteredPrescriptions
+                            .isEmpty)
+                          SliverFillRemaining(
+                            hasScrollBody:
+                                false,
+                            child:
+                                Padding(
+                              padding:
+                                  const EdgeInsets
+                                      .fromLTRB(
+                                16,
+                                10,
+                                16,
+                                30,
+                              ),
+                              child:
+                                  _buildEmptyState(
+                                title:
+                                    _searchText
+                                            .trim()
+                                            .isNotEmpty
+                                        ? 'No prescriptions found'
+                                        : 'No prescriptions yet',
+                                message:
+                                    _searchText
+                                            .trim()
+                                            .isNotEmpty
+                                        ? 'Try a different medicine, doctor, or dosage.'
+                                        : 'Your prescribed medicines will appear here.',
+                                icon: Icons
+                                    .medication_outlined,
+                              ),
+                            ),
+                          )
+                        else
+                          SliverPadding(
+                            padding:
+                                const EdgeInsets
+                                    .fromLTRB(
+                              16,
+                              0,
+                              16,
+                              30,
+                            ),
+                            sliver:
+                                SliverList(
+                              delegate:
+                                  SliverChildListDelegate(
+                                [
+                                  // --------------------------------------
+                                  // ACTIVE
+                                  // --------------------------------------
+
+                                  if (activePrescriptions
+                                      .isNotEmpty) ...[
+                                    _buildSectionHeader(
+                                      title:
+                                          'Active prescriptions',
+                                      count:
+                                          activePrescriptions
+                                              .length,
+                                      active:
+                                          true,
+                                    ),
+                                    ...activePrescriptions
+                                        .map(
+                                      _buildPrescriptionCard,
+                                    ),
+                                  ],
+
+                                  // --------------------------------------
+                                  // ENDED
+                                  // --------------------------------------
+
+                                  if (endedPrescriptions
+                                      .isNotEmpty) ...[
+                                    const SizedBox(
+                                      height: 8,
+                                    ),
+                                    _buildSectionHeader(
+                                      title:
+                                          'Ended prescriptions',
+                                      count:
+                                          endedPrescriptions
+                                              .length,
+                                      active:
+                                          false,
+                                    ),
+                                    ...endedPrescriptions
+                                        .map(
+                                      _buildPrescriptionCard,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
       ),
     );
   }
