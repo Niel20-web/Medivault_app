@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdfrx/pdfrx.dart';
 
 import '../services/medical_record_service.dart';
 import '../services/patient_service.dart';
@@ -24,22 +25,18 @@ class DocumentViewerScreen extends StatefulWidget {
 
 class _DocumentViewerScreenState
     extends State<DocumentViewerScreen> {
-  final PatientService _patientService =
-      PatientService();
-
+  final PatientService _patientService = PatientService();
   final MedicalRecordService _medicalRecordService =
       MedicalRecordService();
-
-  final AuthStorage _authStorage =
-      AuthStorage();
+  final AuthStorage _authStorage = AuthStorage();
 
   String? _error;
-
   Uint8List? _documentBytes;
-
   Map<String, dynamic>? _metadata;
 
   bool _isLoading = true;
+  bool _isPdf = false;
+  String? _documentId;
 
   @override
   void initState() {
@@ -76,11 +73,9 @@ class _DocumentViewerScreenState
       // -----------------------------------------------------------------------
 
       final patientResponse =
-          await _patientService
-              .getMyPatientProfile();
+          await _patientService.getMyPatientProfile();
 
-      final patientData =
-          patientResponse['data'];
+      final patientData = patientResponse['data'];
 
       if (patientData == null) {
         throw Exception(
@@ -88,8 +83,7 @@ class _DocumentViewerScreenState
         );
       }
 
-      final patientId =
-          patientData['_id'];
+      final patientId = patientData['_id'];
 
       print('PATIENT ID: $patientId');
 
@@ -100,11 +94,8 @@ class _DocumentViewerScreenState
         );
       }
 
-      final patientIdString =
-          patientId.toString();
-
-      final documentIdString =
-          documentId.toString();
+      final patientIdString = patientId.toString();
+      final documentIdString = documentId.toString();
 
       // -----------------------------------------------------------------------
       // GET DOCUMENT METADATA
@@ -115,25 +106,21 @@ class _DocumentViewerScreenState
       );
 
       final metadataResponse =
-          await _medicalRecordService
-              .getDocumentMetadata(
+          await _medicalRecordService.getDocumentMetadata(
         patientId: patientIdString,
         documentId: documentIdString,
       );
 
       Map<String, dynamic> metadata;
 
-      final metadataData =
-          metadataResponse['data'];
+      final metadataData = metadataResponse['data'];
 
       if (metadataData is Map) {
-        metadata =
-            Map<String, dynamic>.from(
+        metadata = Map<String, dynamic>.from(
           metadataData,
         );
       } else {
-        metadata =
-            Map<String, dynamic>.from(
+        metadata = Map<String, dynamic>.from(
           metadataResponse,
         );
       }
@@ -151,8 +138,7 @@ class _DocumentViewerScreenState
       );
 
       final url =
-          await _medicalRecordService
-              .getDocumentUrl(
+          await _medicalRecordService.getDocumentUrl(
         patientId: patientIdString,
         documentId: documentIdString,
       );
@@ -172,11 +158,9 @@ class _DocumentViewerScreenState
       // -----------------------------------------------------------------------
 
       final token =
-          await _authStorage
-              .getAccessToken();
+          await _authStorage.getAccessToken();
 
-      if (token == null ||
-          token.isEmpty) {
+      if (token == null || token.isEmpty) {
         throw Exception(
           'No access token found.',
         );
@@ -197,7 +181,7 @@ class _DocumentViewerScreenState
       final response = await http.get(
         Uri.parse(url),
         headers: {
-          'Accept': 'image/*',
+          'Accept': '*/*',
           'Authorization': 'Bearer $token',
         },
       );
@@ -217,8 +201,14 @@ class _DocumentViewerScreenState
         '${response.bodyBytes.length} bytes',
       );
 
+      // -----------------------------------------------------------------------
+      // SESSION EXPIRED
+      // -----------------------------------------------------------------------
+
       if (response.statusCode == 401) {
-        SessionManager.instance.handleSessionExpired(usedToken: token);
+        SessionManager.instance.handleSessionExpired(
+          usedToken: token,
+        );
       }
 
       if (response.statusCode != 200) {
@@ -228,9 +218,39 @@ class _DocumentViewerScreenState
         );
       }
 
-      if (response.bodyBytes.isEmpty) {
+      final bytes = response.bodyBytes;
+
+      if (bytes.isEmpty) {
         throw Exception(
           'The server returned an empty document.',
+        );
+      }
+
+      // -----------------------------------------------------------------------
+      // DETECT DOCUMENT TYPE
+      // -----------------------------------------------------------------------
+
+      final contentType =
+          response.headers['content-type']?.toLowerCase() ??
+              '';
+
+      final isPdf =
+          contentType.contains('application/pdf') ||
+          (
+            bytes.length >= 4 &&
+            bytes[0] == 0x25 && // %
+            bytes[1] == 0x50 && // P
+            bytes[2] == 0x44 && // D
+            bytes[3] == 0x46 // F
+          );
+
+      final isImage =
+          contentType.startsWith('image/') ||
+          _looksLikeImage(bytes);
+
+      if (!isPdf && !isImage) {
+        throw Exception(
+          'The downloaded document format is not supported.',
         );
       }
 
@@ -238,7 +258,9 @@ class _DocumentViewerScreenState
 
       setState(() {
         _metadata = metadata;
-        _documentBytes = response.bodyBytes;
+        _documentBytes = bytes;
+        _isPdf = isPdf;
+        _documentId = documentIdString;
         _isLoading = false;
         _error = null;
       });
@@ -274,9 +296,71 @@ class _DocumentViewerScreenState
     }
   }
 
-  String _stringValue(
-    dynamic value,
-  ) {
+  // ---------------------------------------------------------------------------
+  // IMAGE FORMAT DETECTION
+  // ---------------------------------------------------------------------------
+
+  bool _looksLikeImage(Uint8List bytes) {
+    // JPEG
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return true;
+    }
+
+    // PNG
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47 &&
+        bytes[4] == 0x0D &&
+        bytes[5] == 0x0A &&
+        bytes[6] == 0x1A &&
+        bytes[7] == 0x0A) {
+      return true;
+    }
+
+    // GIF
+    if (bytes.length >= 6) {
+      final header =
+          String.fromCharCodes(
+        bytes.sublist(0, 6),
+      );
+
+      if (header == 'GIF87a' ||
+          header == 'GIF89a') {
+        return true;
+      }
+    }
+
+    // WEBP
+    if (bytes.length >= 12) {
+      final riff =
+          String.fromCharCodes(
+        bytes.sublist(0, 4),
+      );
+
+      final webp =
+          String.fromCharCodes(
+        bytes.sublist(8, 12),
+      );
+
+      if (riff == 'RIFF' &&
+          webp == 'WEBP') {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // STRING HELPER
+  // ---------------------------------------------------------------------------
+
+  String _stringValue(dynamic value) {
     if (value == null) {
       return '';
     }
@@ -292,9 +376,11 @@ class _DocumentViewerScreenState
     return valueString;
   }
 
-  String _formatDate(
-    dynamic value,
-  ) {
+  // ---------------------------------------------------------------------------
+  // DATE FORMATTER
+  // ---------------------------------------------------------------------------
+
+  String _formatDate(dynamic value) {
     final valueString =
         _stringValue(value);
 
@@ -328,9 +414,11 @@ class _DocumentViewerScreenState
     }
   }
 
-  String _formatFileSize(
-    dynamic value,
-  ) {
+  // ---------------------------------------------------------------------------
+  // FILE SIZE FORMATTER
+  // ---------------------------------------------------------------------------
+
+  String _formatFileSize(dynamic value) {
     if (value == null) {
       return '';
     }
@@ -355,6 +443,10 @@ class _DocumentViewerScreenState
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
+  // ---------------------------------------------------------------------------
+  // BUILD
+  // ---------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     final fileName =
@@ -368,9 +460,7 @@ class _DocumentViewerScreenState
                 widget.document['originalName'],
               ).isNotEmpty
                 ? _stringValue(
-                    widget.document[
-                      'originalName'
-                    ],
+                    widget.document['originalName'],
                   )
                 : 'Medical Document';
 
@@ -410,9 +500,11 @@ class _DocumentViewerScreenState
     );
   }
 
-  Widget _buildBody(
-    String fileName,
-  ) {
+  // ---------------------------------------------------------------------------
+  // BODY
+  // ---------------------------------------------------------------------------
+
+  Widget _buildBody(String fileName) {
     // -------------------------------------------------------------------------
     // LOADING
     // -------------------------------------------------------------------------
@@ -507,6 +599,8 @@ class _DocumentViewerScreenState
                     _error = null;
                     _documentBytes = null;
                     _metadata = null;
+                    _isPdf = false;
+                    _documentId = null;
                   });
 
                   _loadDocument();
@@ -620,8 +714,7 @@ class _DocumentViewerScreenState
                 overflow:
                     TextOverflow.ellipsis,
 
-                style:
-                    const TextStyle(
+                style: const TextStyle(
                   fontSize: 15,
                   fontWeight:
                       FontWeight.w700,
@@ -642,8 +735,7 @@ class _DocumentViewerScreenState
                   overflow:
                       TextOverflow.ellipsis,
 
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     color:
                         Appcolors.secondaryText,
@@ -666,7 +758,8 @@ class _DocumentViewerScreenState
                   value:
                       uploadedByRole
                               .isNotEmpty
-                          ? '$uploadedBy • $uploadedByRole'
+                          ? '$uploadedBy • '
+                              '$uploadedByRole'
                           : uploadedBy,
                 ),
 
@@ -734,69 +827,80 @@ class _DocumentViewerScreenState
         Expanded(
           child: Container(
             width: double.infinity,
-
             color:
                 Appcolors.background,
-
             padding:
                 const EdgeInsets.all(12),
 
-            child: InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 4.0,
+            child: _isPdf
+                ? PdfViewer.data(
+                    _documentBytes!,
+                    sourceName:
+                        'medical-document-'
+                        '${_documentId ?? 'document'}'
+                        '.pdf',
+                  )
+                : InteractiveViewer(
+                    minScale: 0.8,
+                    maxScale: 4.0,
 
-              child: Center(
-                child: Image.memory(
-                  _documentBytes!,
-                  fit:
-                      BoxFit.contain,
+                    child: Center(
+                      child: Image.memory(
+                        _documentBytes!,
+                        fit: BoxFit.contain,
 
-                  errorBuilder: (
-                    context,
-                    error,
-                    stackTrace,
-                  ) {
-                    print(
-                      'DOCUMENT MEMORY IMAGE ERROR: '
-                      '$error',
-                    );
+                        errorBuilder: (
+                          context,
+                          error,
+                          stackTrace,
+                        ) {
+                          print(
+                            'DOCUMENT MEMORY IMAGE ERROR: '
+                            '$error',
+                          );
 
-                    return const Column(
-                      mainAxisSize:
-                          MainAxisSize.min,
+                          return const Column(
+                            mainAxisSize:
+                                MainAxisSize.min,
 
-                      children: [
-                        Icon(
-                          Icons
-                              .broken_image_outlined,
-                          size: 56,
-                          color:
-                              Appcolors.secondaryText,
-                        ),
+                            children: [
+                              Icon(
+                                Icons
+                                    .broken_image_outlined,
+                                size: 56,
+                                color:
+                                    Appcolors
+                                        .secondaryText,
+                              ),
 
-                        SizedBox(
-                          height: 12,
-                        ),
+                              SizedBox(
+                                height: 12,
+                              ),
 
-                        Text(
-                          'The document could not be displayed.',
-                          style:
-                              TextStyle(
-                            color:
-                                Appcolors.secondaryText,
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
-            ),
+                              Text(
+                                'The document could not '
+                                'be displayed.',
+                                style: TextStyle(
+                                  color:
+                                      Appcolors
+                                          .secondaryText,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
           ),
         ),
       ],
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // INFO ROW
+  // ---------------------------------------------------------------------------
 
   Widget _infoRow({
     required IconData icon,
@@ -827,8 +931,7 @@ class _DocumentViewerScreenState
 
           Text(
             '$label: ',
-            style:
-                const TextStyle(
+            style: const TextStyle(
               fontSize: 12,
               fontWeight:
                   FontWeight.w600,
@@ -840,8 +943,7 @@ class _DocumentViewerScreenState
           Expanded(
             child: Text(
               value,
-              style:
-                  const TextStyle(
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight:
                     FontWeight.w600,

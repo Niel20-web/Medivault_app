@@ -200,7 +200,9 @@ class HomeContent extends StatelessWidget {
   Widget build(BuildContext context) {
     String firstName = 'there';
     String fullName = 'Patient';
-    String patientId = 'Loading...';
+
+    // This is the public ID shown to the patient.
+    String displayPatientId = 'Loading...';
 
     if (patient != null) {
       firstName = patient!['firstName']?.toString() ?? 'there';
@@ -214,10 +216,15 @@ class HomeContent extends StatelessWidget {
         fullName = 'Patient';
       }
 
-      patientId = patient!['patientId']?.toString() ??
-          patient!['profileId']?.toString() ??
-          patient!['_id']?.toString() ??
-          'Unknown';
+      // Use profileId for the ID displayed in the UI.
+      //
+      // Example:
+      // profileId = KEQNY2C4
+      //
+      // Do NOT use patientId here because that is the
+      // backend/canonical patient identifier.
+      displayPatientId =
+          patient!['profileId']?.toString() ?? 'Unknown';
     }
 
     return SafeArea(
@@ -273,7 +280,8 @@ class HomeContent extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
                         const Text(
                           'Medical ID',
@@ -298,7 +306,7 @@ class HomeContent extends StatelessWidget {
                         const SizedBox(height: 6),
 
                         Text(
-                          patientId,
+                          displayPatientId,
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 13,
@@ -331,7 +339,11 @@ class HomeContent extends StatelessWidget {
 
                   const SizedBox(width: 12),
 
-                  if (patient != null && patient!['_id'] != null)
+                  // Keep using the internal patient _id for the QR.
+                  // This is separate from the public profileId
+                  // displayed above.
+                  if (patient != null &&
+                      patient!['_id'] != null)
                     Container(
                       width: 88,
                       height: 88,
@@ -409,7 +421,6 @@ class HomeContent extends StatelessWidget {
                   },
                 ),
 
-                // PRESCRIPTIONS
                 QuickAccessCard(
                   icon: Icons.medication_outlined,
                   title: 'Prescriptions',
@@ -438,14 +449,15 @@ class HomeContent extends StatelessWidget {
                   },
                 ),
 
-              QuickAccessCard(
+                QuickAccessCard(
                   icon: Icons.notifications_none_outlined,
                   title: 'Notifications',
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const NotificationsScreen(),
+                        builder: (context) =>
+                            const NotificationsScreen(),
                       ),
                     );
                   },

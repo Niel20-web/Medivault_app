@@ -41,9 +41,7 @@ class _ProfilePageState extends State<ProfilePage> {
       final patientData = response['data'];
 
       if (patientData == null) {
-        throw Exception(
-          'No patient profile is linked to this account.',
-        );
+        throw Exception('No patient profile is linked to this account.');
       }
 
       if (!mounted) return;
@@ -57,10 +55,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
       setState(() {
         _isLoading = false;
-        _error = e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        );
+        _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -82,11 +77,9 @@ class _ProfilePageState extends State<ProfilePage> {
       return 'Patient';
     }
 
-    final firstName =
-        _patient!['firstName']?.toString().trim() ?? '';
+    final firstName = _patient!['firstName']?.toString().trim() ?? '';
 
-    final lastName =
-        _patient!['lastName']?.toString().trim() ?? '';
+    final lastName = _patient!['lastName']?.toString().trim() ?? '';
 
     final name = '$firstName $lastName'.trim();
 
@@ -170,11 +163,9 @@ class _ProfilePageState extends State<ProfilePage> {
       return 'Not available';
     }
 
-    final city =
-        _patient!['city']?.toString().trim() ?? '';
+    final city = _patient!['city']?.toString().trim() ?? '';
 
-    final state =
-        _patient!['state']?.toString().trim() ?? '';
+    final state = _patient!['state']?.toString().trim() ?? '';
 
     if (city.isNotEmpty && state.isNotEmpty) {
       return '$city, $state';
@@ -195,22 +186,19 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     if (address is Map) {
-      final addressText = [
-        address['line1'],
-        address['line2'],
-        address['city'],
-        address['state'],
-        address['postalCode'],
-      ]
-          .where(
-            (value) =>
-                value != null &&
-                value.toString().trim().isNotEmpty,
-          )
-          .map(
-            (value) => value.toString().trim(),
-          )
-          .join(', ');
+      final addressText =
+          [
+                address['line1'],
+                address['line2'],
+                address['city'],
+                address['state'],
+                address['postalCode'],
+              ]
+              .where(
+                (value) => value != null && value.toString().trim().isNotEmpty,
+              )
+              .map((value) => value.toString().trim())
+              .join(', ');
 
       if (addressText.isNotEmpty) {
         return addressText;
@@ -225,11 +213,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     final updatedProfile = await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => EditProfileScreen(
-          patient: _patient!,
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => EditProfileScreen(patient: _patient!)),
     );
 
     if (updatedProfile == true) {
@@ -248,9 +232,7 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!mounted) return;
 
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => const WelcomeScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
         (route) => false,
       );
     } catch (e) {
@@ -263,10 +245,7 @@ class _ProfilePageState extends State<ProfilePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Logout failed: ${e.toString().replaceFirst(
-              'Exception: ',
-              '',
-            )}',
+            'Logout failed: ${e.toString().replaceFirst('Exception: ', '')}',
           ),
         ),
       );
@@ -274,11 +253,9 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature will be available soon.'),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$feature will be available soon.')));
   }
 
   void _showLogoutConfirmation() {
@@ -287,9 +264,7 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Log Out'),
-          content: const Text(
-            'Are you sure you want to log out?',
-          ),
+          content: const Text('Are you sure you want to log out?'),
           actions: [
             TextButton(
               onPressed: () {
@@ -340,9 +315,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Appcolors.primary,
-        ),
+        child: CircularProgressIndicator(color: Appcolors.primary),
       );
     }
 
@@ -371,10 +344,7 @@ class _ProfilePageState extends State<ProfilePage> {
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Appcolors.secondaryText,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: Appcolors.secondaryText, fontSize: 14),
               ),
               const SizedBox(height: 20),
               ElevatedButton(
@@ -406,35 +376,26 @@ class _ProfilePageState extends State<ProfilePage> {
               showArrow: false,
             ),
 
-            const Divider(
-              height: 1,
-              indent: 20,
-              endIndent: 20,
-            ),
+            const Divider(height: 1, indent: 20, endIndent: 20),
 
             _buildInformationTile(
               icon: Icons.phone,
               title: 'Phone',
               value: _displayValue(
-                _patient?['phone'] ??
-                    _patient?['phoneNumber'],
+                _patient?['phone'] ?? _patient?['phoneNumber'],
               ),
             ),
 
             _buildInformationTile(
               icon: Icons.email,
               title: 'Email',
-              value: _displayValue(
-                _patient?['email'],
-              ),
+              value: _displayValue(_patient?['email']),
             ),
 
             _buildInformationTile(
               icon: Icons.cake,
               title: 'Date of Birth',
-              value: _formatDate(
-                _patient?['dateOfBirth'],
-              ),
+              value: _formatDate(_patient?['dateOfBirth']),
             ),
 
             const SizedBox(height: 15),
@@ -445,18 +406,12 @@ class _ProfilePageState extends State<ProfilePage> {
               showArrow: false,
             ),
 
-            const Divider(
-              height: 1,
-              indent: 20,
-              endIndent: 20,
-            ),
+            const Divider(height: 1, indent: 20, endIndent: 20),
 
             _buildInformationTile(
               icon: Icons.bloodtype,
               title: 'Blood Group',
-              value: _formatBloodGroup(
-                _patient?['bloodGroup'],
-              ),
+              value: _formatBloodGroup(_patient?['bloodGroup']),
             ),
 
             _buildInformationTile(
@@ -473,11 +428,7 @@ class _ProfilePageState extends State<ProfilePage> {
               showArrow: false,
             ),
 
-            const Divider(
-              height: 1,
-              indent: 20,
-              endIndent: 20,
-            ),
+            const Divider(height: 1, indent: 20, endIndent: 20),
 
             _buildAccountTile(
               icon: Icons.edit_outlined,
@@ -504,15 +455,10 @@ class _ProfilePageState extends State<ProfilePage> {
             const SizedBox(height: 10),
 
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: const Icon(
-                  Icons.logout,
-                  color: Appcolors.error,
-                ),
+                leading: const Icon(Icons.logout, color: Appcolors.error),
                 title: const Text(
                   'Log Out',
                   style: TextStyle(
@@ -529,13 +475,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           color: Appcolors.error,
                         ),
                       )
-                    : const Icon(
-                        Icons.chevron_right,
-                        color: Appcolors.primary,
-                      ),
-                onTap: _isLoggingOut
-                    ? null
-                    : _showLogoutConfirmation,
+                    : const Icon(Icons.chevron_right, color: Appcolors.primary),
+                onTap: _isLoggingOut ? null : _showLogoutConfirmation,
               ),
             ),
 
@@ -549,10 +490,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget _buildProfileHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.only(
-        top: 10,
-        bottom: 30,
-      ),
+      padding: const EdgeInsets.only(top: 10, bottom: 30),
       child: Column(
         children: [
           CircleAvatar(
@@ -582,9 +520,7 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 5),
 
           Text(
-            'Patient ID: ${_displayValue(
-              _patient?['patientId'],
-            )}',
+            'Patient ID: ${_displayValue(_patient?['profileId'])}',
             style: const TextStyle(
               color: Appcolors.secondaryText,
               fontSize: 14,
@@ -601,19 +537,10 @@ class _ProfilePageState extends State<ProfilePage> {
     bool showArrow = true,
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        18,
-        20,
-        12,
-      ),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 22,
-            color: Appcolors.primary,
-          ),
+          Icon(icon, size: 22, color: Appcolors.primary),
 
           const SizedBox(width: 10),
 
@@ -629,10 +556,7 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
 
           if (showArrow)
-            const Icon(
-              Icons.chevron_right,
-              color: Appcolors.secondaryText,
-            ),
+            const Icon(Icons.chevron_right, color: Appcolors.secondaryText),
         ],
       ),
     );
@@ -644,10 +568,7 @@ class _ProfilePageState extends State<ProfilePage> {
     required String value,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 12,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -655,16 +576,10 @@ class _ProfilePageState extends State<ProfilePage> {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: Appcolors.primary.withValues(
-                alpha: 0.10,
-              ),
+              color: Appcolors.primary.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: Appcolors.primary,
-              size: 21,
-            ),
+            child: Icon(icon, color: Appcolors.primary, size: 21),
           ),
 
           const SizedBox(width: 14),
@@ -705,26 +620,15 @@ class _ProfilePageState extends State<ProfilePage> {
     required VoidCallback onTap,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 20,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: ListTile(
         contentPadding: EdgeInsets.zero,
-        leading: Icon(
-          icon,
-          color: Appcolors.primary,
-        ),
+        leading: Icon(icon, color: Appcolors.primary),
         title: Text(
           title,
-          style: const TextStyle(
-            color: Appcolors.primaryText,
-            fontSize: 16,
-          ),
+          style: const TextStyle(color: Appcolors.primaryText, fontSize: 16),
         ),
-        trailing: const Icon(
-          Icons.chevron_right,
-          color: Appcolors.primaryText,
-        ),
+        trailing: const Icon(Icons.chevron_right, color: Appcolors.primaryText),
         onTap: onTap,
       ),
     );
