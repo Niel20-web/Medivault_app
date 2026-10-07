@@ -23,27 +23,47 @@ class SessionManager {
 
   /// True when a token is stored and has not passed its `exp` time.
   Future<bool> hasValidSession() async {
-    final token = await _authStorage.getAccessToken();
+    try {
+      final token = await _authStorage.getAccessToken();
 
-    if (token == null || token.isEmpty) {
+      if (token == null || token.isEmpty) {
+        return false;
+      }
+
+      if (_isExpired(token)) {
+        await _authStorage.deleteAccessToken();
+        return false;
+      }
+
+      return true;
+    } catch (_) {
+      // Secure storage can fail to read (for example after a reinstall or
+      // a restored backup). Treat that as "not logged in" instead of
+      // leaving the app stuck on the loading screen.
+      try {
+        await _authStorage.deleteAccessToken();
+      } catch (_) {}
       return false;
     }
-
-    if (_isExpired(token)) {
-      await _authStorage.deleteAccessToken();
-      return false;
-    }
-
-    return true;
   }
 
   /// Called when the backend rejects the token. Clears it and sends the
   /// user back to the welcome/login flow, showing a short message.
-  Future<void> handleSessionExpired() async {
+  ///
+  /// [usedToken] is the token the failed request was sent with. If the
+  /// stored token is no longer that one (the user already logged out or
+  /// logged in again), the late 401 is ignored.
+  Future<void> handleSessionExpired({String? usedToken}) async {
     if (_isHandlingExpiry) return;
     _isHandlingExpiry = true;
 
     try {
+      final storedToken = await _authStorage.getAccessToken();
+
+      if (usedToken != null && storedToken != usedToken) {
+        return;
+      }
+
       await _authStorage.deleteAccessToken();
 
       final navigator = navigatorKey.currentState;

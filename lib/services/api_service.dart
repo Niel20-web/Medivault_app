@@ -28,7 +28,7 @@ class ApiService {
     if (token != null &&
         response.statusCode == 401 &&
         endpoint != '/auth/logout') {
-      SessionManager.instance.handleSessionExpired();
+      SessionManager.instance.handleSessionExpired(usedToken: token);
     }
 
     return response;

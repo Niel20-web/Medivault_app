@@ -93,6 +93,10 @@ class AuthService {
           token: token,
         );
       }
+    } catch (e) {
+      // The server call is best effort (offline, expired token, etc.).
+      // The user must still be logged out locally.
+      print('LOGOUT REQUEST FAILED (ignored): $e');
     } finally {
       await _authStorage.deleteAccessToken();
     }

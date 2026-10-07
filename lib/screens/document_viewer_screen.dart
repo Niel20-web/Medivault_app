@@ -218,7 +218,7 @@ class _DocumentViewerScreenState
       );
 
       if (response.statusCode == 401) {
-        SessionManager.instance.handleSessionExpired();
+        SessionManager.instance.handleSessionExpired(usedToken: token);
       }
 
       if (response.statusCode != 200) {
