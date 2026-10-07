@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../services/medical_record_service.dart';
 import '../services/patient_service.dart';
+import '../services/session_manager.dart';
 import '../utils/appcolors.dart';
 import '../utils/auth_storage.dart';
 
@@ -215,6 +216,10 @@ class _DocumentViewerScreenState
         'DOCUMENT SIZE: '
         '${response.bodyBytes.length} bytes',
       );
+
+      if (response.statusCode == 401) {
+        SessionManager.instance.handleSessionExpired();
+      }
 
       if (response.statusCode != 200) {
         throw Exception(
