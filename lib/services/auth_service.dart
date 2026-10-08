@@ -25,9 +25,12 @@ class AuthService {
     final data = jsonDecode(response.body);
 
     if (response.statusCode == 200) {
-      final String? accessToken = data['data']?['accessToken'] as String?;
+      final String? accessToken =
+          data['data']?['accessToken'] as String?;
 
-      print('ACCESS TOKEN RECEIVED: ${accessToken != null}');
+      print(
+        'ACCESS TOKEN RECEIVED: ${accessToken != null}',
+      );
 
       if (accessToken == null) {
         throw Exception(
@@ -52,35 +55,84 @@ class AuthService {
     required String firstName,
     required String lastName,
     String? phone,
+    String role = 'PATIENT',
+    bool createPatientIdentity = true,
     Map<String, dynamic>? identity,
   }) async {
+    final Map<String, dynamic> requestBody = {
+      'email': email.trim(),
+      'username': username.trim(),
+      'password': password,
+      'firstName': firstName.trim(),
+      'lastName': lastName.trim(),
+      'role': role,
+      'createPatientIdentity': createPatientIdentity,
+    };
+
+    if (phone != null && phone.trim().isNotEmpty) {
+      requestBody['phone'] = phone.trim();
+    }
+
+    if (identity != null) {
+      requestBody['identity'] = identity;
+    }
+
+    print('REGISTER REQUEST: ${jsonEncode(requestBody)}');
+
     final response = await _apiService.post(
       '/auth/register',
-      body: {
-        'email': email,
-        'username': username,
-        'password': password,
-        'firstName': firstName,
-        'lastName': lastName,
-        if (phone != null && phone.isNotEmpty) 'phone': phone,
-        'role': 'PATIENT',
-        'createPatientIdentity': true,
-        if (identity != null) 'identity': identity,
-      },
+      body: requestBody,
     );
 
     print('REGISTER STATUS: ${response.statusCode}');
     print('REGISTER RESPONSE: ${response.body}');
 
-    final data = jsonDecode(response.body);
+    dynamic decodedData;
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return Map<String, dynamic>.from(data);
+    try {
+      decodedData = jsonDecode(response.body);
+    } catch (_) {
+      throw Exception(
+        'Registration failed. The server returned an invalid response.',
+      );
     }
 
-    throw Exception(
-      data['error']?['message'] ?? 'Registration failed',
-    );
+    if (response.statusCode == 200 ||
+        response.statusCode == 201) {
+      if (decodedData is Map) {
+        return Map<String, dynamic>.from(decodedData);
+      }
+
+      throw Exception(
+        'Registration succeeded but the server returned an unexpected response.',
+      );
+    }
+
+    String errorMessage = 'Registration failed.';
+
+    if (decodedData is Map) {
+      final dynamic error = decodedData['error'];
+
+      if (error is Map) {
+        final dynamic message = error['message'];
+
+        if (message != null &&
+            message.toString().trim().isNotEmpty) {
+          errorMessage = message.toString();
+        }
+      }
+
+      if (errorMessage == 'Registration failed.') {
+        final dynamic message = decodedData['message'];
+
+        if (message != null &&
+            message.toString().trim().isNotEmpty) {
+          errorMessage = message.toString();
+        }
+      }
+    }
+
+    throw Exception(errorMessage);
   }
 
   Future<void> logout() async {
@@ -94,9 +146,12 @@ class AuthService {
         );
       }
     } catch (e) {
-      // The server call is best effort (offline, expired token, etc.).
+      // The server call is best effort
+      // (offline, expired token, etc.).
       // The user must still be logged out locally.
-      print('LOGOUT REQUEST FAILED (ignored): $e');
+      print(
+        'LOGOUT REQUEST FAILED (ignored): $e',
+      );
     } finally {
       await _authStorage.deleteAccessToken();
     }
